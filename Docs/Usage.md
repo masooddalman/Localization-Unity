@@ -1,0 +1,479 @@
+# Usage Guide
+
+Complete API documentation for PicoShot Localization system.
+
+## Table of Contents
+
+- [Initialization](#initialization)
+- [Getting System Language](#getting-system-language)
+- [Enumerating Available Languages](#enumerating-available-languages)
+- [Getting Native Language Names](#getting-native-language-names)
+- [Setting Language](#setting-language)
+- [Text Retrieval](#text-retrieval)
+- [Bind Functions (Components)](#bind-functions-components)
+- [Events](#events)
+- [Advanced Usage](#advanced-usage)
+
+---
+
+## Initialization
+
+The localization system initializes automatically on startup. No manual initialization is required.
+
+```csharp
+// Check if initialized
+if (LocalizationManager.IsInitialized)
+{
+    // System is ready
+}
+
+// Manual initialization (optional, system auto initialize itself)
+LocalizationManager.Initialize();
+```
+
+---
+
+## Getting System Language
+
+Detect the user's system language and convert it to a supported language code.
+
+```csharp
+// Get system language as ISO code (e.g., "en", "es", "ja")
+string systemLanguage = LocalizationManager.DetectSystemLanguage();
+
+// Direct conversion from Unity's SystemLanguage
+string langCode = LanguageDefinitions.FromSystemLanguage(Application.systemLanguage);
+```
+
+### Language Code Examples
+
+| System Language      | Code      |
+| -------------------- | --------- |
+| English              | `en`      |
+| Spanish              | `es`      |
+| French               | `fr`      |
+| German               | `de`      |
+| Japanese             | `ja`      |
+| Chinese (Simplified) | `zh-hans` |
+| Arabic               | `ar`      |
+
+---
+
+## Enumerating Available Languages
+
+Get all languages that have translation files available at runtime.
+
+```csharp
+// Get language codes only
+IEnumerable<string> codes = LocalizationManager.GetAvailableLanguageCodes();
+foreach (string code in codes)
+{
+    Debug.Log($"Available: {code}");
+}
+
+// Get display names (English names)
+IEnumerable<string> names = LocalizationManager.GetAvailableLanguages();
+foreach (string name in names)
+{
+    Debug.Log($"Available: {name}");  // e.g., "English", "Spanish"
+}
+
+// Get display names with native names
+IEnumerable<string> namesWithNative = LocalizationManager.GetAvailableLanguages(withNativeNames: true);
+foreach (string name in namesWithNative)
+{
+    Debug.Log($"Available: {name}");  // e.g., "English (English)", "Spanish (español)"
+}
+```
+
+### Check Language Availability
+
+```csharp
+// Check if a specific language is available
+bool hasSpanish = LocalizationManager.IsLanguageAvailable("es");
+bool hasJapanese = LocalizationManager.IsLanguageAvailable("ja");
+```
+
+---
+
+## Getting Native Language Names
+
+Display language names in their native form (e.g., "日本語" for Japanese).
+
+```csharp
+// Get display name in English (default)
+string englishName = LocalizationManager.GetLanguageDisplayName("ja");     // "Japanese"
+string spanishName = LocalizationManager.GetLanguageDisplayName("es");     // "Spanish"
+
+// Get native display name
+string nativeJapanese = LocalizationManager.GetLanguageDisplayName("ja", native: true);  // "日本語"
+string nativeSpanish = LocalizationManager.GetLanguageDisplayName("es", native: true);   // "español"
+```
+
+### Get Language Code from Name
+
+```csharp
+// Convert display name back to code
+string code = LocalizationManager.GetLanguageCode("Japanese");           // "ja"
+string codeNative = LocalizationManager.GetLanguageCode("日本語", nativeName: true);  // "ja"
+```
+
+### Supported Language Properties
+
+```csharp
+// Check if language is RTL (Right-to-Left)
+bool isRtl = LanguageDefinitions.IsRightToLeft("ar");  // true for Arabic
+bool isRtl = LanguageDefinitions.IsRightToLeft("he");  // true for Hebrew
+
+// Get fallback language
+string fallback = LanguageDefinitions.GetFallbackLanguage("en-US");  // "en"
+```
+
+---
+
+## Setting Language
+
+Change the current language at runtime. All bound text components will update automatically.
+
+```csharp
+// Set language by code
+LocalizationManager.SetLanguage("es");  // Switch to Spanish
+LocalizationManager.SetLanguage("ja");  // Switch to Japanese
+
+// Set with fallback option (default: true)
+// If the requested language isn't available, it will try fallback or use default
+LocalizationManager.SetLanguage("en-GB", useFallback: true);
+```
+
+### Current Language Info
+
+```csharp
+// Get current language code
+string current = LocalizationManager.CurrentLanguage;  // e.g., "en"
+
+// Check if current language is RTL
+bool isRtl = LocalizationManager.IsRightToLeft;  // true for Arabic, Hebrew, etc.
+
+// Get default language from config
+string defaultLang = LocalizationManager.DefaultLanguage;
+```
+
+---
+
+## Text Retrieval
+
+### Get Simple Text
+
+```csharp
+// Basic translation
+string text = LocalizationManager.GetText("greeting");
+
+// With format parameters
+string welcome = LocalizationManager.GetText("welcome", "Player");
+string stats = LocalizationManager.GetText("stats", "100", "50");
+
+// Translation file example:
+// "welcome": "Welcome, {0}!"
+// "stats": "Health: {0}, Mana: {1}"
+```
+
+### Get Array Text
+
+For translations stored as arrays (e.g., dropdown options).
+
+```csharp
+// Get entire array
+string[] options = LocalizationManager.GetArray("difficulty_options");
+// Returns: ["Easy", "Normal", "Hard", "Expert"]
+
+// Get specific element
+string difficulty = LocalizationManager.GetArrayText("difficulty_options", 2);  // "Hard"
+
+// Get with bounds checking (returns placeholder if out of range)
+string invalid = LocalizationManager.GetArrayText("difficulty_options", 10);  // "[difficulty_options:10]"
+```
+
+### Check Key Existence
+
+```csharp
+// Check if key exists in current language
+bool hasKey = LocalizationManager.HasKey("greeting");
+
+// Check if key exists in default language
+bool hasInDefault = LocalizationManager.HasKeyInDefault("greeting");
+
+// Get all available keys
+IEnumerable<string> allKeys = LocalizationManager.GetAllKeys();
+```
+
+---
+
+## Bind Functions (Components)
+
+The `LocalizationTextComponent` automatically binds text components to the localization system.
+
+### Basic Usage
+
+```csharp
+// Add component via code
+var localized = gameObject.AddComponent<LocalizationTextComponent>();
+localized.TranslationKey = "greeting";
+```
+
+### Properties
+
+```csharp
+// Set translation key
+component.TranslationKey = "welcome_message";
+
+// For array values: get specific index (-1 for string value)
+component.ArrayIndex = 2;  // Get 3rd element from array
+
+// For dropdowns: limit number of options
+component.ArraySizeLimit = 5;  // Show max 5 options
+
+// Format parameters
+component.FormatParameters = new[] { "Player", "100" };
+// Or use the method:
+component.SetFormatParameters("Player", "100");
+
+// Set individual parameter
+component.SetFormatParameter(0, "New Name");
+```
+
+### Methods
+
+```csharp
+// Force text update
+component.UpdateText();
+
+// Force complete refresh (re-initializes components)
+component.ForceRefresh();
+
+// Add text processor (modifies text before display)
+component.AddTextProcessor(text => text.ToUpper());
+component.AddTextProcessor(text => $"[ {text} ]");
+
+// Remove processor
+component.RemoveTextProcessor(myProcessor);
+
+// Clear all processors
+component.ClearTextProcessors();
+```
+
+### Text Processors
+
+Text processors allow you to modify the translated text before it's displayed.
+
+```csharp
+// Example: Add color tags
+component.AddTextProcessor(text => $"<color=green>{text}</color>");
+
+// Example: Truncate long text
+component.AddTextProcessor(text =>
+    text.Length > 20 ? text.Substring(0, 17) + "..." : text);
+
+// Example: Add prefix based on language
+component.AddTextProcessor(text =>
+    LocalizationManager.CurrentLanguage == "ja" ? $"【{text}】" : text);
+```
+
+### Events
+
+```csharp
+// Subscribe to text update event
+component.onTextUpdated.AddListener(updatedText =>
+{
+    Debug.Log($"Text updated to: {updatedText}");
+});
+```
+
+### Component Type
+
+```csharp
+// Check component type
+TextComponentType type = component.ComponentType;
+// Values: TMPText, TMPDropdown, LegacyText, LegacyDropdown, TextMesh, None
+
+// Check if attached to dropdown
+bool isDropdown = component.IsDropdown;
+
+// Get current displayed text
+string currentText = component.CurrentText;
+```
+
+---
+
+## Events
+
+Subscribe to localization events to react to language changes.
+
+### OnLanguageChanged
+
+Triggered when the language is changed. All localized components update automatically.
+
+```csharp
+// Subscribe
+LocalizationManager.OnLanguageChanged += OnLanguageChanged;
+
+// Handler
+void OnLanguageChanged()
+{
+    Debug.Log($"Language changed to: {LocalizationManager.CurrentLanguage}");
+    // Update UI, reload textures, etc.
+}
+
+// Unsubscribe
+LocalizationManager.OnLanguageChanged -= OnLanguageChanged;
+```
+
+### OnLanguageLoadError
+
+Triggered when there's an error loading a language file.
+
+```csharp
+LocalizationManager.OnLanguageLoadError += OnLanguageError;
+
+void OnLanguageError(string errorMessage)
+{
+    Debug.LogError($"Language load error: {errorMessage}");
+}
+```
+
+### OnMissingTranslation
+
+Triggered when a translation key is not found.
+
+```csharp
+LocalizationManager.OnMissingTranslation += OnMissingKey;
+
+void OnMissingKey(string key)
+{
+    Debug.LogWarning($"Missing translation: {key}");
+}
+```
+
+---
+
+## Advanced Usage
+
+### Manual File Operations (Editor Only)
+
+```csharp
+#if UNITY_EDITOR
+// Save locale data
+LocalizationManager.SaveLocaleToFile(path, localeData, compress: true);
+
+// Load locale data
+LocaleData data = LocalizationManager.LoadLocaleFromFile(path);
+
+// Get file path for language
+string filePath = LocalizationManager.GetLanguageFilePath("en");
+
+// Refresh available languages
+LocalizationManager.RefreshAvailableLanguages();
+#endif
+```
+
+### Configuration Properties
+
+```csharp
+// Get languages directory path
+string path = LocalizationManager.LanguagesPath;
+
+// Check anti-tamper status
+bool antiTamper = LocalizationManager.IsAntiTamperEnabled;
+
+// Get selected languages (when protection is enabled)
+IReadOnlyList<string> selected = LocalizationManager.SelectedLanguages;
+```
+
+### Cleanup
+
+```csharp
+// Dispose resources (called automatically on application quit)
+LocalizationManager.Dispose();
+```
+
+---
+
+## Examples
+
+### Language Selection Dropdown
+
+```csharp
+public class LanguageSelector : MonoBehaviour
+{
+    [SerializeField] private TMP_Dropdown dropdown;
+
+    void Start()
+    {
+        // Get available languages
+        var languages = LocalizationManager.GetAvailableLanguages().ToList();
+        var codes = LocalizationManager.GetAvailableLanguageCodes().ToList();
+
+        // Populate dropdown
+        dropdown.ClearOptions();
+        dropdown.AddOptions(languages);
+
+        // Set current selection
+        dropdown.value = codes.IndexOf(LocalizationManager.CurrentLanguage);
+
+        // Handle selection
+        dropdown.onValueChanged.AddListener(index =>
+        {
+            LocalizationManager.SetLanguage(codes[index]);
+        });
+    }
+}
+```
+
+### Dynamic Text Update
+
+```csharp
+public class ScoreDisplay : MonoBehaviour
+{
+    [SerializeField] private LocalizationTextComponent localizedText;
+
+    void Update()
+    {
+        // Update score display with current values
+        localizedText.SetFormatParameters(
+            ScoreManager.CurrentScore.ToString(),
+            ScoreManager.HighScore.ToString()
+        );
+    }
+}
+```
+
+### RTL Layout Adjustment
+
+```csharp
+public class RtlLayoutHandler : MonoBehaviour
+{
+    [SerializeField] private RectTransform contentPanel;
+
+    void Start()
+    {
+        LocalizationManager.OnLanguageChanged += AdjustLayout;
+        AdjustLayout();
+    }
+
+    void AdjustLayout()
+    {
+        // Adjust anchor/pivot for RTL languages
+        if (LocalizationManager.IsRightToLeft)
+        {
+            contentPanel.anchorMin = new Vector2(1, 0);
+            contentPanel.anchorMax = new Vector2(1, 1);
+            contentPanel.pivot = new Vector2(1, 0.5f);
+        }
+        else
+        {
+            contentPanel.anchorMin = new Vector2(0, 0);
+            contentPanel.anchorMax = new Vector2(0, 1);
+            contentPanel.pivot = new Vector2(0, 0.5f);
+        }
+    }
+}
+```

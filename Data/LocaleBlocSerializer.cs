@@ -2,92 +2,81 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
 
 namespace PicoShot.Localization.Data
 {
     /// <summary>
     /// BLOC (Binary Localization Container) format serializer for single-language files.
-    /// Optimized binary format for fast O(1) lookup with string deduplication.
+    /// Optimized binary format with embedded language code and deduplicated strings.
+    /// 
+    /// - Header (32 bytes): Magic, Version, Flags, LanguageCode, EntryCount, StringCount, Offsets
+    /// - Entry Table: 8 bytes per entry (KeyId: 4 + ValueId: 4)
+    /// - String Pool: Length-prefixed UTF-8 strings
+    /// - Footer (16 bytes): CRC32 checksum + reserved
     /// </summary>
     public static class LocaleBlocSerializer
     {
-        // Header constants
+        // Magic and version
         private static readonly byte[] Magic = { 0x42, 0x4C, 0x4F, 0x43 }; // "BLOC"
-        private const uint Version = 1;
-        private const int HeaderSize = 64;
-        private const int FooterSize = 32;
+        private const int Version = 1;
+        private const int HeaderSize = 32;
+        private const int FooterSize = 16;
 
         // Flags
-        private const uint FlagProtected = 0x01;
-        private const uint FlagHasArrays = 0x02;
+        private const uint FlagHasArrays = 0x01;
+        private const uint FlagHasMetadata = 0x02;
 
         /// <summary>
         /// Serializes locale data to BLOC format.
         /// </summary>
-        public static byte[] Serialize(LocaleData data, bool protect = true)
+        public static byte[] Serialize(LocaleData data)
         {
             if (data?.Translations == null)
                 throw new ArgumentNullException(nameof(data));
 
+            var entries = BuildEntries(data.Translations);
+            var stringPool = BuildStringPool(entries);
+            var stringToId = BuildStringToIdMap(stringPool);
+
             using var ms = new MemoryStream();
             using var writer = new BinaryWriter(ms, Encoding.UTF8);
 
-            var stringPool = BuildStringPool(data.Translations);
-            var stringToId = BuildStringToIdMap(stringPool);
+            uint flags = CalculateFlags(entries);
+            int entryCount = entries.Count;
+            int stringCount = stringPool.Count;
 
-            int arrayCount = 0;
-            foreach (var entry in data.Translations)
-            {
-                if (entry.Value is List<string> || entry.Value is string[])
-                {
-                    arrayCount++;
-                }
-            }
-
-            // Entry format: KeyID (4) + Type (1) + ValueRef (4) = 9 bytes
+            int entryTableSize = entryCount * 8;
             int stringPoolSize = CalculateStringPoolSize(stringPool);
-            int entryTableSize = data.Translations.Count * 9;
-            int arrayTableSize = CalculateArrayTableSize(data.Translations, stringToId);
+            int metadataSize = CalculateMetadataSize(data);
 
-            uint flags = 0;
-            if (protect) flags |= FlagProtected;
-            if (arrayCount > 0) flags |= FlagHasArrays;
+            long entryTableOffset = HeaderSize;
+            long stringPoolOffset = entryTableOffset + entryTableSize;
+            long metadataOffset = stringPoolOffset + stringPoolSize;
+            long footerOffset = metadataOffset + metadataSize;
 
-            long stringPoolOffset = HeaderSize;
-            long entryTableOffset = stringPoolOffset + stringPoolSize;
-            long arrayTableOffset = arrayCount > 0 ? entryTableOffset + entryTableSize : 0;
-            long payloadSize = arrayCount > 0
-                ? arrayTableOffset + arrayTableSize - HeaderSize
-                : entryTableOffset + entryTableSize - HeaderSize;
+            // Write header
+            WriteHeader(writer, flags, data.LanguageCode, (uint)entryCount, (uint)stringCount,
+                (uint)entryTableOffset, (uint)stringPoolOffset, (uint)metadataOffset);
 
-            // Write header (will rewrite with correct hash later if protected)
-            WriteHeader(writer, flags, (uint)data.Translations.Count, (uint)arrayCount, (uint)stringPool.Count,
-                (ulong)stringPoolOffset, (ulong)entryTableOffset, (ulong)arrayTableOffset, (ulong)payloadSize);
+            // Write entry table
+            WriteEntryTable(writer, entries, stringToId);
 
+            // Write string pool
             WriteStringPool(writer, stringPool);
 
-            var arrayIndexMap = WriteEntryTable(writer, data.Translations, stringToId);
-
-            if (arrayCount > 0)
+            // Write metadata
+            if ((flags & FlagHasMetadata) != 0)
             {
-                WriteArrayTable(writer, data.Translations, stringToId, arrayIndexMap);
+                WriteMetadata(writer, data);
             }
 
-            long payloadEnd = ms.Position;
-            byte[] hash = new byte[32];
-            writer.Write(hash);
-
-            if (protect)
-            {
-                ms.Position = 0;
-                byte[] fileData = ms.ToArray();
-                hash = ComputeHash(fileData, HeaderSize, (int)(payloadEnd - HeaderSize));
-
-                ms.Position = payloadEnd;
-                writer.Write(hash);
-            }
+            // Write footer with checksum
+            uint checksum = ComputeCrc32(ms.GetBuffer(), 0, (int)ms.Position);
+            writer.Write(checksum);
+            writer.Write(0u); // Reserved
+            writer.Write(0u); // Reserved
+            writer.Write(0u); // Reserved
 
             return ms.ToArray();
         }
@@ -100,37 +89,44 @@ namespace PicoShot.Localization.Data
             if (data == null || data.Length < HeaderSize + FooterSize)
                 throw new ArgumentException("Data too short to be valid BLOC file", nameof(data));
 
+            // Verify magic
+            if (data.Length < 4 ||
+                data[0] != Magic[0] || data[1] != Magic[1] ||
+                data[2] != Magic[2] || data[3] != Magic[3])
+            {
+                throw new InvalidDataException("Invalid BLOC magic number");
+            }
+
             using var ms = new MemoryStream(data);
             using var reader = new BinaryReader(ms, Encoding.UTF8);
 
+            // Read header
             var header = ReadHeader(reader);
-
-            if (!header.Magic.SequenceEqual(Magic))
-                throw new InvalidDataException("Invalid BLOC magic number");
 
             if (header.Version != Version)
                 throw new InvalidDataException($"Unsupported BLOC version: {header.Version}");
 
-            if ((header.Flags & FlagProtected) != 0)
+            // Read string pool
+            ms.Position = header.StringPoolOffset;
+            var stringPool = ReadStringPool(reader, (int)header.StringCount);
+
+            // Read entry table
+            ms.Position = header.EntryTableOffset;
+            var translations = ReadEntryTable(reader, header.EntryCount, stringPool);
+
+            // Read metadata if present
+            long timestamp = 0;
+            if ((header.Flags & FlagHasMetadata) != 0 && header.MetadataOffset > 0)
             {
-                VerifyHash(data, header);
+                ms.Position = header.MetadataOffset;
+                timestamp = reader.ReadInt64();
             }
-
-            ms.Position = (long)header.StringPoolOffset + 4;
-            var stringPool = ReadStringPool(reader, header.StringCount, header.StringPoolOffset);
-
-            string[][] arrays = null;
-            if ((header.Flags & FlagHasArrays) != 0 && header.ArrayCount > 0)
-            {
-                arrays = ReadArrays(reader, header, stringPool);
-            }
-
-            ms.Position = (long)header.EntryTableOffset;
-            var translations = ReadEntryTable(reader, header.EntryCount, stringPool, arrays);
 
             return new LocaleData
             {
                 Version = (int)header.Version,
+                LanguageCode = header.LanguageCode,
+                Timestamp = timestamp,
                 Translations = translations
             };
         }
@@ -150,7 +146,7 @@ namespace PicoShot.Localization.Data
         /// <summary>
         /// Saves locale data to a BLOC file.
         /// </summary>
-        public static void SaveToFile(string path, LocaleData data, bool protect = true)
+        public static void SaveToFile(string path, LocaleData data)
         {
             string directory = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
@@ -158,321 +154,268 @@ namespace PicoShot.Localization.Data
                 Directory.CreateDirectory(directory);
             }
 
-            byte[] bytes = Serialize(data, protect);
+            byte[] bytes = Serialize(data);
             File.WriteAllBytes(path, bytes);
         }
 
         #region Private Methods
 
-        private static void WriteHeader(BinaryWriter writer, uint flags, uint entryCount, uint arrayCount,
-            uint stringCount, ulong stringPoolOffset, ulong entryTableOffset, ulong arrayTableOffset, ulong payloadSize)
+        private sealed class Entry
         {
-            writer.Write(Magic);                          // 0x00: Magic (4 bytes)
-            writer.Write(Version);                        // 0x04: Version (4 bytes)
-            writer.Write(flags);                          // 0x08: Flags (4 bytes)
-            writer.Write(entryCount);                     // 0x0C: EntryCount (4 bytes)
-            writer.Write(arrayCount);                     // 0x10: ArrayCount (4 bytes)
-            writer.Write(stringCount);                    // 0x14: StringCount (4 bytes)
-            writer.Write(stringPoolOffset);               // 0x18: StringPoolOffset (8 bytes)
-            writer.Write(entryTableOffset);               // 0x20: EntryTableOffset (8 bytes)
-            writer.Write(arrayTableOffset);               // 0x28: ArrayTableOffset (8 bytes)
-            writer.Write(payloadSize);                    // 0x30: PayloadSize (8 bytes)
-            writer.Write(0UL);                            // 0x38: Reserved (8 bytes)
+            public string Key;
+            public object Value;
+            public bool IsArray;
         }
 
-        private static (byte[] Magic, uint Version, uint Flags, uint EntryCount, uint ArrayCount, uint StringCount,
-            ulong StringPoolOffset, ulong EntryTableOffset, ulong ArrayTableOffset, ulong PayloadSize) ReadHeader(BinaryReader reader)
+        private static void WriteHeader(BinaryWriter writer, uint flags, string languageCode,
+            uint entryCount, uint stringCount, uint entryTableOffset, uint stringPoolOffset, uint metadataOffset)
         {
-            var magic = reader.ReadBytes(4);
-            uint version = reader.ReadUInt32();
-            uint flags = reader.ReadUInt32();
+            writer.Write(Magic);
+            writer.Write((ushort)Version);
+            writer.Write((ushort)flags);
+
+            byte[] langBytes = Encoding.ASCII.GetBytes(languageCode ?? "en");
+            byte[] paddedLang = new byte[4];
+            int copyLen = Math.Min(langBytes.Length, 4);
+            Array.Copy(langBytes, paddedLang, copyLen);
+            writer.Write(paddedLang);
+
+            writer.Write(entryCount);
+            writer.Write(stringCount);
+            writer.Write(entryTableOffset);
+            writer.Write(stringPoolOffset);
+            writer.Write(metadataOffset);
+        }
+
+        private static (ushort Version, ushort Flags, string LanguageCode, uint EntryCount,
+            uint StringCount, uint EntryTableOffset, uint StringPoolOffset, uint MetadataOffset) ReadHeader(BinaryReader reader)
+        {
+            reader.ReadBytes(4); // Magic (already verified)
+            ushort version = reader.ReadUInt16();
+            ushort flags = reader.ReadUInt16();
+
+            byte[] langBytes = reader.ReadBytes(4);
+            int langLen = 0;
+            while (langLen < 4 && langBytes[langLen] != 0)
+                langLen++;
+            string languageCode = Encoding.ASCII.GetString(langBytes, 0, langLen);
+
             uint entryCount = reader.ReadUInt32();
-            uint arrayCount = reader.ReadUInt32();
             uint stringCount = reader.ReadUInt32();
-            ulong stringPoolOffset = reader.ReadUInt64();
-            ulong entryTableOffset = reader.ReadUInt64();
-            ulong arrayTableOffset = reader.ReadUInt64();
-            ulong payloadSize = reader.ReadUInt64();
-            reader.ReadUInt64(); // Skip reserved
+            uint entryTableOffset = reader.ReadUInt32();
+            uint stringPoolOffset = reader.ReadUInt32();
+            uint metadataOffset = reader.ReadUInt32();
 
-            return (magic, version, flags, entryCount, arrayCount, stringCount,
-                stringPoolOffset, entryTableOffset, arrayTableOffset, payloadSize);
+            return (version, flags, languageCode, entryCount, stringCount,
+                entryTableOffset, stringPoolOffset, metadataOffset);
         }
 
-        private static List<string> BuildStringPool(Dictionary<string, object> translations)
+        private static List<Entry> BuildEntries(Dictionary<string, object> translations)
         {
-            var poolSet = new HashSet<string>();
-
-            foreach (var entry in translations)
+            var entries = new List<Entry>(translations.Count);
+            foreach (var kvp in translations)
             {
-                poolSet.Add(entry.Key);
+                entries.Add(new Entry
+                {
+                    Key = kvp.Key,
+                    Value = kvp.Value,
+                    IsArray = kvp.Value is List<string> or string[]
+                });
+            }
+            return entries;
+        }
 
-                if (entry.Value is string str)
+        private static List<string> BuildStringPool(List<Entry> entries)
+        {
+            var pool = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var entry in entries)
+            {
+                pool.Add(entry.Key);
+                if (entry.IsArray)
                 {
-                    poolSet.Add(str);
-                }
-                else if (entry.Value is List<string> list)
-                {
-                    foreach (var item in list)
+                    var items = entry.Value is List<string> list ? list : (IEnumerable<string>)(string[])entry.Value;
+                    // Add the encoded array string itself
+                    pool.Add(EncodeArray(items));
+                    // Also add individual items for deduplication
+                    foreach (var item in items)
                     {
-                        poolSet.Add(item);
+                        if (item != null)
+                            pool.Add(item);
                     }
                 }
-                else if (entry.Value is string[] arr)
+                else if (entry.Value != null)
                 {
-                    foreach (var item in arr)
-                    {
-                        poolSet.Add(item);
-                    }
+                    pool.Add(entry.Value.ToString());
                 }
             }
-
-            return poolSet.ToList();
+            return pool.ToList();
         }
 
         private static Dictionary<string, uint> BuildStringToIdMap(List<string> pool)
         {
-            var map = new Dictionary<string, uint>(pool.Count);
+            var map = new Dictionary<string, uint>(pool.Count, StringComparer.Ordinal);
             for (uint i = 0; i < pool.Count; i++)
-            {
                 map[pool[(int)i]] = i;
-            }
             return map;
+        }
+
+        private static uint CalculateFlags(List<Entry> entries)
+        {
+            uint flags = FlagHasMetadata; // Always include metadata
+            if (entries.Any(e => e.IsArray))
+                flags |= FlagHasArrays;
+            return flags;
         }
 
         private static int CalculateStringPoolSize(List<string> pool)
         {
-            int size = 4; // StringCount (uint32)
-            size += pool.Count * 2; // Length table (uint16 per string)
-            size += pool.Count * 4; // Offset table (uint32 per string)
-
-            // Data size
+            int size = 0;
             foreach (var str in pool)
             {
+                size += 4; // Length prefix
                 size += Encoding.UTF8.GetByteCount(str);
             }
-
             return size;
+        }
+
+        private static int CalculateMetadataSize(LocaleData data)
+        {
+            return 8; // Timestamp only
+        }
+
+        private static void WriteEntryTable(BinaryWriter writer, List<Entry> entries, Dictionary<string, uint> stringToId)
+        {
+            foreach (var entry in entries)
+            {
+                writer.Write(stringToId[entry.Key]);
+
+                if (entry.IsArray)
+                {
+                    var items = entry.Value is List<string> list ? list : (IEnumerable<string>)(string[])entry.Value;
+                    var arrayString = EncodeArray(items);
+                    writer.Write(stringToId[arrayString]);
+                }
+                else
+                {
+                    writer.Write(stringToId[entry.Value?.ToString() ?? ""]);
+                }
+            }
+        }
+
+        private static string EncodeArray(IEnumerable<string> items)
+        {
+            var sb = new StringBuilder();
+            sb.Append('\u0001'); // Array marker
+            var itemList = items.ToList();
+            sb.Append(itemList.Count);
+            foreach (var item in itemList)
+            {
+                sb.Append('\u0002'); // Item separator
+                sb.Append(item?.Replace("\u0002", "\u0003") ?? "");
+            }
+            return sb.ToString();
+        }
+
+        private static List<string> DecodeArray(string encoded)
+        {
+            if (string.IsNullOrEmpty(encoded) || encoded[0] != '\u0001')
+                return new List<string>();
+
+            var result = new List<string>();
+            int pos = 1;
+
+            // Read count
+            int count = 0;
+            while (pos < encoded.Length && char.IsDigit(encoded[pos]))
+            {
+                count = count * 10 + (encoded[pos] - '0');
+                pos++;
+            }
+
+            // Read items
+            for (int i = 0; i < count && pos < encoded.Length; i++)
+            {
+                if (encoded[pos] == '\u0002')
+                    pos++;
+
+                int start = pos;
+                while (pos < encoded.Length && encoded[pos] != '\u0002')
+                    pos++;
+
+                string item = encoded.Substring(start, pos - start).Replace("\u0003", "\u0002");
+                result.Add(item);
+            }
+
+            return result;
         }
 
         private static void WriteStringPool(BinaryWriter writer, List<string> pool)
         {
-            writer.Write((uint)pool.Count);
-
-            var offsets = new uint[pool.Count];
-            uint currentOffset = (uint)(4 + pool.Count * 2 + pool.Count * 4);
-
-            for (int i = 0; i < pool.Count; i++)
-            {
-                byte[] bytes = Encoding.UTF8.GetBytes(pool[i]);
-                writer.Write((ushort)bytes.Length);
-                offsets[i] = currentOffset;
-                currentOffset += (uint)bytes.Length;
-            }
-
-            foreach (var offset in offsets)
-            {
-                writer.Write(offset);
-            }
-
             foreach (var str in pool)
             {
-                writer.Write(Encoding.UTF8.GetBytes(str));
+                byte[] bytes = Encoding.UTF8.GetBytes(str);
+                writer.Write(bytes.Length);
+                writer.Write(bytes);
             }
         }
 
-        private static string[] ReadStringPool(BinaryReader reader, uint count, ulong stringPoolOffset)
+        private static string[] ReadStringPool(BinaryReader reader, int count)
         {
-            var strings = new string[count];
-            var lengths = new ushort[count];
-            var offsets = new uint[count];
-
+            var pool = new string[count];
             for (int i = 0; i < count; i++)
             {
-                lengths[i] = reader.ReadUInt16();
+                int length = reader.ReadInt32();
+                byte[] bytes = reader.ReadBytes(length);
+                pool[i] = Encoding.UTF8.GetString(bytes);
             }
-
-            for (int i = 0; i < count; i++)
-            {
-                offsets[i] = reader.ReadUInt32();
-            }
-
-            for (int i = 0; i < count; i++)
-            {
-                reader.BaseStream.Position = (long)stringPoolOffset + offsets[i];
-                byte[] bytes = reader.ReadBytes(lengths[i]);
-                strings[i] = Encoding.UTF8.GetString(bytes);
-            }
-
-            return strings;
+            return pool;
         }
 
-        private static int CalculateArrayTableSize(Dictionary<string, object> translations,
-            Dictionary<string, uint> stringToId)
+        private static Dictionary<string, object> ReadEntryTable(BinaryReader reader, uint entryCount, string[] stringPool)
         {
-            int size = 0;
-
-            foreach (var entry in translations)
-            {
-                List<string> list = null;
-
-                if (entry.Value is List<string> l)
-                    list = l;
-                else if (entry.Value is string[] a)
-                    list = a.ToList();
-
-                if (list != null && list.Count > 0)
-                {
-                    size += 4; // ArrayID
-                    size += 4; // Length
-                    size += list.Count * 4; // StringIDs
-                }
-            }
-
-            return size;
-        }
-
-        private static Dictionary<string, int> WriteEntryTable(BinaryWriter writer,
-            Dictionary<string, object> translations,
-            Dictionary<string, uint> stringToId)
-        {
-            var arrayIndexMap = new Dictionary<string, int>();
-            int currentArrayIndex = 0;
-
-            foreach (var entry in translations)
-            {
-                string key = entry.Key;
-                object value = entry.Value;
-
-                bool isArray = value is List<string> || value is string[];
-
-                writer.Write(stringToId[key]); // KeyID (4 bytes)
-                writer.Write((byte)(isArray ? 0x01 : 0x00)); // Type (1 byte)
-
-                if (isArray)
-                {
-                    writer.Write((uint)currentArrayIndex); // Array index (4 bytes)
-                    arrayIndexMap[key] = currentArrayIndex;
-                    currentArrayIndex++;
-                }
-                else
-                {
-                    string str = value?.ToString() ?? "";
-                    writer.Write(stringToId[str]); // String pool index (4 bytes)
-                }
-            }
-
-            return arrayIndexMap;
-        }
-
-        private static void WriteArrayTable(BinaryWriter writer,
-            Dictionary<string, object> translations,
-            Dictionary<string, uint> stringToId,
-            Dictionary<string, int> arrayIndexMap)
-        {
-            var orderedArrays = arrayIndexMap.OrderBy(kvp => kvp.Value).ToList();
-
-            foreach (var kvp in orderedArrays)
-            {
-                string key = kvp.Key;
-
-                List<string> list = translations[key] as List<string>;
-                if (list == null && translations[key] is string[] arr)
-                {
-                    list = arr.ToList();
-                }
-
-                writer.Write((uint)kvp.Value); // ArrayID
-                writer.Write((uint)list.Count); // Length
-
-                foreach (var item in list)
-                {
-                    writer.Write(stringToId[item]); // StringID
-                }
-            }
-        }
-
-        private static Dictionary<string, object> ReadEntryTable(BinaryReader reader,
-            uint entryCount, string[] stringPool, string[][] arrays)
-        {
-            var translations = new Dictionary<string, object>();
+            var translations = new Dictionary<string, object>((int)entryCount, StringComparer.Ordinal);
 
             for (int i = 0; i < entryCount; i++)
             {
-                // Entry format: KeyID (4) + Type (1) + ValueRef (4) = 9 bytes
                 uint keyId = reader.ReadUInt32();
-                byte type = reader.ReadByte();
-                uint valueRef = reader.ReadUInt32();
+                uint valueId = reader.ReadUInt32();
 
                 string key = stringPool[keyId];
-                object value;
+                string value = stringPool[valueId];
 
-                if (type == 0x01 && arrays != null)
+                if (!string.IsNullOrEmpty(value) && value[0] == '\u0001')
                 {
-                    // Array
-                    value = arrays[valueRef].ToList();
+                    translations[key] = DecodeArray(value);
                 }
                 else
                 {
-                    // Scalar
-                    value = stringPool[valueRef];
+                    translations[key] = value;
                 }
-
-                translations[key] = value;
             }
 
             return translations;
         }
 
-        private static string[][] ReadArrays(BinaryReader reader,
-            (byte[] Magic, uint Version, uint Flags, uint EntryCount, uint ArrayCount, uint StringCount,
-            ulong StringPoolOffset, ulong EntryTableOffset, ulong ArrayTableOffset, ulong PayloadSize) header,
-            string[] stringPool)
+        private static void WriteMetadata(BinaryWriter writer, LocaleData data)
         {
-            var arrays = new string[header.ArrayCount][];
+            writer.Write(data.Timestamp);
+        }
 
-            reader.BaseStream.Position = (long)header.ArrayTableOffset;
+        private static uint ComputeCrc32(byte[] data, int offset, int count)
+        {
+            const uint polynomial = 0xEDB88320;
+            uint crc = 0xFFFFFFFF;
 
-            for (int i = 0; i < header.ArrayCount; i++)
+            for (int i = offset; i < offset + count; i++)
             {
-                uint arrayId = reader.ReadUInt32();
-                uint length = reader.ReadUInt32();
-
-                var arr = new string[length];
-                for (int j = 0; j < length; j++)
+                crc ^= data[i];
+                for (int j = 0; j < 8; j++)
                 {
-                    uint stringId = reader.ReadUInt32();
-                    arr[j] = stringPool[stringId];
+                    crc = (crc >> 1) ^ (polynomial & ~(crc & 1));
                 }
-
-                arrays[arrayId] = arr;
             }
 
-            return arrays;
-        }
-
-        private static byte[] ComputeHash(byte[] data, int offset, int count)
-        {
-            using var sha256 = SHA256.Create();
-            return sha256.ComputeHash(data, offset, count);
-        }
-
-        private static void VerifyHash(byte[] data, (byte[] Magic, uint Version, uint Flags, uint EntryCount,
-            uint ArrayCount, uint StringCount, ulong StringPoolOffset, ulong EntryTableOffset,
-            ulong ArrayTableOffset, ulong PayloadSize) header)
-        {
-            int payloadStart = HeaderSize;
-            int payloadEnd = data.Length - FooterSize;
-            int payloadSize = payloadEnd - payloadStart;
-
-            byte[] computedHash = ComputeHash(data, payloadStart, payloadSize);
-            byte[] storedHash = new byte[32];
-            Array.Copy(data, payloadEnd, storedHash, 0, 32);
-
-            if (!computedHash.SequenceEqual(storedHash))
-            {
-                throw new InvalidDataException("BLOC file integrity check failed (SHA-256 mismatch)");
-            }
+            return ~crc;
         }
 
         #endregion

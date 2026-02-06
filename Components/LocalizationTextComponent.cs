@@ -5,7 +5,6 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
-using UnityEngine.UIElements;
 
 namespace PicoShot.Localization
 {
@@ -41,6 +40,9 @@ namespace PicoShot.Localization
 
         #region Properties
 
+        /// <summary>
+        /// The translation key used for lookup.
+        /// </summary>
         public string TranslationKey
         {
             get => translationKey;
@@ -52,6 +54,9 @@ namespace PicoShot.Localization
             }
         }
 
+        /// <summary>
+        /// Array index for array-type translations. -1 for string values.
+        /// </summary>
         public int ArrayIndex
         {
             get => arrayIndex;
@@ -63,6 +68,9 @@ namespace PicoShot.Localization
             }
         }
 
+        /// <summary>
+        /// Maximum number of options for dropdown components.
+        /// </summary>
         public int ArraySizeLimit
         {
             get => arraySizeLimit;
@@ -74,6 +82,9 @@ namespace PicoShot.Localization
             }
         }
 
+        /// <summary>
+        /// Format parameters for string.Format().
+        /// </summary>
         public string[] FormatParameters
         {
             get => formatParameters;
@@ -105,6 +116,11 @@ namespace PicoShot.Localization
         /// </summary>
         public bool IsDropdown => _tmpDropdown != null || _legacyDropdown != null;
 
+        /// <summary>
+        /// Gets the current displayed text.
+        /// </summary>
+        public string CurrentText => _lastText;
+
         #endregion
 
         #region Private Fields
@@ -131,7 +147,10 @@ namespace PicoShot.Localization
         private void OnEnable()
         {
             LocalizationManager.OnLanguageChanged += UpdateText;
-            UpdateText();
+            if (_isInitialized)
+            {
+                UpdateText();
+            }
         }
 
         private void OnDisable()
@@ -194,6 +213,10 @@ namespace PicoShot.Localization
         {
             if (!isActiveAndEnabled) return;
             if (string.IsNullOrEmpty(translationKey)) return;
+            if (!_isInitialized)
+            {
+                Initialize();
+            }
 
             try
             {
@@ -320,13 +343,16 @@ namespace PicoShot.Localization
                 return;
             }
 
+            // Filter out empty options
             options = options.Where(opt => !string.IsNullOrEmpty(opt)).ToArray();
 
+            // Apply size limit
             if (arraySizeLimit > 0 && options.Length > arraySizeLimit)
             {
                 options = options.Take(arraySizeLimit).ToArray();
             }
 
+            // Apply text processors
             for (int i = 0; i < options.Length; i++)
             {
                 options[i] = ApplyProcessors(options[i]);
@@ -334,38 +360,49 @@ namespace PicoShot.Localization
 
             if (_tmpDropdown != null)
             {
-                int selectedValue = _tmpDropdown.value;
-                _tmpDropdown.ClearOptions();
-                _tmpDropdown.AddOptions(options.ToList());
-
-                if (selectedValue < options.Length)
-                {
-                    _tmpDropdown.value = selectedValue;
-                }
-                else if (options.Length > 0)
-                {
-                    _tmpDropdown.value = 0;
-                }
-
-                _tmpDropdown.RefreshShownValue();
+                UpdateTMPDropdown(_tmpDropdown, options);
             }
             else if (_legacyDropdown != null)
             {
-                int selectedValue = _legacyDropdown.value;
-                _legacyDropdown.ClearOptions();
-                _legacyDropdown.AddOptions(options.ToList());
-
-                if (selectedValue < options.Length)
-                {
-                    _legacyDropdown.value = selectedValue;
-                }
-                else if (options.Length > 0)
-                {
-                    _legacyDropdown.value = 0;
-                }
-
-                _legacyDropdown.RefreshShownValue();
+                UpdateLegacyDropdown(_legacyDropdown, options);
             }
+        }
+
+        private static void UpdateTMPDropdown(TMP_Dropdown dropdown, string[] options)
+        {
+            int selectedValue = dropdown.value;
+            dropdown.ClearOptions();
+            dropdown.AddOptions(options.ToList());
+
+            // Restore selection if valid, otherwise select first
+            if (selectedValue < options.Length)
+            {
+                dropdown.value = selectedValue;
+            }
+            else if (options.Length > 0)
+            {
+                dropdown.value = 0;
+            }
+
+            dropdown.RefreshShownValue();
+        }
+
+        private static void UpdateLegacyDropdown(Dropdown dropdown, string[] options)
+        {
+            int selectedValue = dropdown.value;
+            dropdown.ClearOptions();
+            dropdown.AddOptions(options.ToList());
+
+            if (selectedValue < options.Length)
+            {
+                dropdown.value = selectedValue;
+            }
+            else if (options.Length > 0)
+            {
+                dropdown.value = 0;
+            }
+
+            dropdown.RefreshShownValue();
         }
 
         private string GetTranslatedText()
@@ -385,6 +422,8 @@ namespace PicoShot.Localization
 
         private string ApplyProcessors(string text)
         {
+            if (_textProcessors.Count == 0) return text;
+
             foreach (var processor in _textProcessors)
             {
                 if (processor != null)

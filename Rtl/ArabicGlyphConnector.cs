@@ -56,10 +56,10 @@ namespace PicoShot.Localization.Rtl
         /// <summary>
         /// Determines the position of a letter within a word.
         /// </summary>
-        public static LetterPosition GetLetterPosition(char[] word, int index)
+        public static LetterPosition GetLetterPosition(char[] word, int index, int length)
         {
             bool hasPrevious = index > 0 && CanConnectFromPrevious(word, index);
-            bool hasNext = index < word.Length - 1 && CanConnectToNext(word, index);
+            bool hasNext = index < length - 1 && CanConnectToNext(word, index);
 
             if (hasPrevious && hasNext)
                 return LetterPosition.Middle;
@@ -69,6 +69,14 @@ namespace PicoShot.Localization.Rtl
                 return LetterPosition.Beginning;
             
             return LetterPosition.Isolated;
+        }
+
+        /// <summary>
+        /// Determines the position of a letter within a word (uses word.Length as length).
+        /// </summary>
+        public static LetterPosition GetLetterPosition(char[] word, int index)
+        {
+            return GetLetterPosition(word, index, word.Length);
         }
 
         private static bool CanConnectFromPrevious(char[] word, int index)
@@ -116,11 +124,11 @@ namespace PicoShot.Localization.Rtl
         /// </summary>
         public static bool IsIgnoredCharacter(char ch)
         {
-            bool isPresentationFormB = ch >= (char)0xFE70 && ch <= (char)0xFEFF;
+            bool isPresentationFormB = ch >= '\uFE70' && ch <= '\uFEFF';
             
-            bool isPersianCharacter = ch is (char)0xFB56 or (char)0xFB7A or (char)0xFB8A or (char)0xFB92 or (char)0xFB8E;
+            bool isPersianCharacter = ch is '\uFB56' or '\uFB7A' or '\uFB8A' or '\uFB92' or '\uFB8E';
             
-            bool isAcceptableCharacter = isPresentationFormB || isPersianCharacter || ch == (char)0xFBFC;
+            bool isAcceptableCharacter = isPresentationFormB || isPersianCharacter || ch == '\uFBFC';
 
             if (!isAcceptableCharacter)
                 return true;
@@ -131,7 +139,7 @@ namespace PicoShot.Localization.Rtl
             if (char.IsLower(ch) || char.IsUpper(ch))
                 return true;
 
-            return ch == 'a' || ch == '>' || ch == '<' || ch == (char)0x061B;
+            return ch == 'a' || ch == '>' || ch == '<' || ch == '\u061B';
         }
 
         /// <summary>
@@ -148,19 +156,19 @@ namespace PicoShot.Localization.Rtl
             switch (nextChar)
             {
                 case (char)IsolatedArabicLetters.AlefMaksoor:
-                    combinedLam = (char)0xFEF7; // Lam-Alef Maksora
+                    combinedLam = '\uFEF7'; // Lam-Alef Maksora
                     nextOutput = (char)0xFFFF;
                     return true;
                 case (char)IsolatedArabicLetters.Alef:
-                    combinedLam = (char)0xFEF9; // Lam-Alef
+                    combinedLam = '\uFEF9'; // Lam-Alef
                     nextOutput = (char)0xFFFF;
                     return true;
                 case (char)IsolatedArabicLetters.AlefHamza:
-                    combinedLam = (char)0xFEF5; // Lam-Alef Hamza
+                    combinedLam = '\uFEF5'; // Lam-Alef Hamza
                     nextOutput = (char)0xFFFF;
                     return true;
                 case (char)IsolatedArabicLetters.AlefMad:
-                    combinedLam = (char)0xFEF3; // Lam-Alef Mad
+                    combinedLam = '\uFEF3'; // Lam-Alef Mad
                     nextOutput = (char)0xFFFF;
                     return true;
             }

@@ -1,6 +1,7 @@
+using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Text;
-using UnityEngine;
 
 namespace PicoShot.Localization.Rtl
 {
@@ -21,12 +22,10 @@ namespace PicoShot.Localization.Rtl
 
     /// <summary>
     /// Core RTL text fixing logic.
+    /// Thread-safe implementation using ArrayPool for reduced allocations.
     /// </summary>
     internal static class RtlTextFixer
     {
-        private static readonly StringBuilder LineBuilder = new(1024);
-        private static readonly List<char> NumberBuffer = new(16);
-
         /// <summary>
         /// Fixes a line of RTL text for proper display.
         /// </summary>
@@ -36,71 +35,98 @@ namespace PicoShot.Localization.Rtl
                 return line;
 
             List<TashkeelPosition> tashkeelPositions = null;
+            string processedLine = line;
+
             if (!options.ShowTashkeel)
             {
-                line = TashkeelHandler.RemoveTashkeel(line, out tashkeelPositions);
+                processedLine = TashkeelHandler.RemoveTashkeel(line, out tashkeelPositions);
             }
 
-            char[] isolatedChars = new char[line.Length];
-            for (int i = 0; i < line.Length; i++)
-            {
-                isolatedChars[i] = (char)ArabicLetterConverter.ToIsolated(line[i]);
-            }
+            int length = processedLine.Length;
+            
+            // Rent arrays from pool to avoid allocations
+            char[] isolatedChars = ArrayPool<char>.Shared.Rent(length);
+            char[] connectedChars = ArrayPool<char>.Shared.Rent(length);
+            char[] finalChars = ArrayPool<char>.Shared.Rent(length + (tashkeelPositions?.Count ?? 0));
 
-            char[] connectedChars = new char[isolatedChars.Length];
-            for (int i = 0; i < isolatedChars.Length; i++)
+            try
             {
-                connectedChars[i] = isolatedChars[i];
-
-                if (i < isolatedChars.Length - 1 && 
-                    ArabicGlyphConnector.TryCombineLamAlef(
-                        isolatedChars[i], 
-                        isolatedChars[i + 1], 
-                        out var combinedLam, 
-                        out var nextOutput))
+                // Step 1: Convert to isolated forms
+                for (int i = 0; i < length; i++)
                 {
-                    connectedChars[i] = combinedLam;
-                    connectedChars[i + 1] = nextOutput;
-                    i++;
-                }
-            }
-
-            char[] finalChars = new char[connectedChars.Length];
-            for (int i = 0; i < connectedChars.Length; i++)
-            {
-                if (ArabicGlyphConnector.IsIgnoredCharacter(connectedChars[i]))
-                {
-                    finalChars[i] = connectedChars[i];
-                    continue;
+                    isolatedChars[i] = (char)ArabicLetterConverter.ToIsolated(processedLine[i]);
                 }
 
-                var position = ArabicGlyphConnector.GetLetterPosition(connectedChars, i);
-                finalChars[i] = ArabicGlyphConnector.GetGlyphForm(connectedChars[i], position);
-
-                if (options.UseHinduNumbers)
+                // Step 2: Connect letters and handle Lam-Alef
+                int connectedLength = 0;
+                for (int i = 0; i < length; i++)
                 {
-                    finalChars[i] = ConvertToHinduNumber(finalChars[i]);
+                    if (i < length - 1 && 
+                        ArabicGlyphConnector.TryCombineLamAlef(
+                            isolatedChars[i], 
+                            isolatedChars[i + 1], 
+                            out char combinedLam, 
+                            out char nextOutput))
+                    {
+                        connectedChars[connectedLength++] = combinedLam;
+                        connectedChars[connectedLength++] = nextOutput;
+                        i++; // Skip next char as it's part of the ligature
+                    }
+                    else
+                    {
+                        connectedChars[connectedLength++] = isolatedChars[i];
+                    }
                 }
-            }
 
-            if (options.ShowTashkeel && tashkeelPositions != null)
+                // Step 3: Apply glyph forms based on position
+                int finalLength = 0;
+                for (int i = 0; i < connectedLength; i++)
+                {
+                    char c = connectedChars[i];
+                    
+                    if (ArabicGlyphConnector.IsIgnoredCharacter(c))
+                    {
+                        finalChars[finalLength++] = c;
+                        continue;
+                    }
+
+                    var position = ArabicGlyphConnector.GetLetterPosition(connectedChars, i, connectedLength);
+                    char glyphForm = ArabicGlyphConnector.GetGlyphForm(c, position);
+                    
+                    if (options.UseHinduNumbers)
+                    {
+                        glyphForm = ConvertToHinduNumber(glyphForm);
+                    }
+                    
+                    finalChars[finalLength++] = glyphForm;
+                }
+
+                // Step 4: Restore tashkeel if needed
+                if (options.ShowTashkeel && tashkeelPositions != null)
+                {
+                    TashkeelHandler.RestoreTashkeel(finalChars, ref finalLength, tashkeelPositions);
+                }
+
+                // Step 5: Reorder for RTL display
+                return ReorderForRtl(finalChars, finalLength);
+            }
+            finally
             {
-                TashkeelHandler.RestoreTashkeel(ref finalChars, tashkeelPositions);
+                ArrayPool<char>.Shared.Return(isolatedChars);
+                ArrayPool<char>.Shared.Return(connectedChars);
+                ArrayPool<char>.Shared.Return(finalChars);
             }
-
-            return ReorderForRtl(finalChars);
         }
 
         /// <summary>
         /// Reorders characters for RTL display, handling embedded LTR text (numbers, Latin).
         /// </summary>
-        private static string ReorderForRtl(char[] chars)
+        private static string ReorderForRtl(char[] chars, int length)
         {
-            LineBuilder.Clear();
-            LineBuilder.EnsureCapacity(chars.Length);
-            NumberBuffer.Clear();
+            var sb = new StringBuilder(length);
+            var numberBuffer = new List<char>(16);
 
-            for (int i = chars.Length - 1; i >= 0; i--)
+            for (int i = length - 1; i >= 0; i--)
             {
                 char c = chars[i];
 
@@ -109,34 +135,34 @@ namespace PicoShot.Localization.Rtl
 
                 if (IsBracket(c))
                 {
-                    FlushNumberBuffer();
-                    LineBuilder.Append(FlipBracket(c));
+                    FlushNumberBuffer(sb, numberBuffer);
+                    sb.Append(FlipBracket(c));
                     continue;
                 }
 
                 if (IsLatinChar(c) || char.IsSymbol(c) || char.IsSurrogate(c))
                 {
-                    NumberBuffer.Add(c);
+                    numberBuffer.Add(c);
                     continue;
                 }
 
-                FlushNumberBuffer();
-                LineBuilder.Append(c);
+                FlushNumberBuffer(sb, numberBuffer);
+                sb.Append(c);
             }
 
-            FlushNumberBuffer();
-            return LineBuilder.ToString();
+            FlushNumberBuffer(sb, numberBuffer);
+            return sb.ToString();
+        }
 
-            void FlushNumberBuffer()
+        private static void FlushNumberBuffer(StringBuilder sb, List<char> buffer)
+        {
+            if (buffer.Count == 0) return;
+
+            for (int j = buffer.Count - 1; j >= 0; j--)
             {
-                if (NumberBuffer.Count == 0) return;
-
-                for (int j = NumberBuffer.Count - 1; j >= 0; j--)
-                {
-                    LineBuilder.Append(NumberBuffer[j]);
-                }
-                NumberBuffer.Clear();
+                sb.Append(buffer[j]);
             }
+            buffer.Clear();
         }
 
         private static bool IsLatinChar(char c)
@@ -146,7 +172,7 @@ namespace PicoShot.Localization.Rtl
 
         private static bool IsBracket(char c)
         {
-            return c is '(' or ')' or '<' or '>' or '[' or ']';
+            return c is '(' or ')' or '<' or '>' or '[' or ']' or '{' or '}';
         }
 
         private static char FlipBracket(char c)
@@ -159,6 +185,8 @@ namespace PicoShot.Localization.Rtl
                 '>' => '<',
                 '[' => ']',
                 ']' => '[',
+                '{' => '}',
+                '}' => '{',
                 _ => c
             };
         }
@@ -167,16 +195,16 @@ namespace PicoShot.Localization.Rtl
         {
             return c switch
             {
-                '0' => (char)0x0660,
-                '1' => (char)0x0661,
-                '2' => (char)0x0662,
-                '3' => (char)0x0663,
-                '4' => (char)0x0664,
-                '5' => (char)0x0665,
-                '6' => (char)0x0666,
-                '7' => (char)0x0667,
-                '8' => (char)0x0668,
-                '9' => (char)0x0669,
+                '0' => '\u0660',
+                '1' => '\u0661',
+                '2' => '\u0662',
+                '3' => '\u0663',
+                '4' => '\u0664',
+                '5' => '\u0665',
+                '6' => '\u0666',
+                '7' => '\u0667',
+                '8' => '\u0668',
+                '9' => '\u0669',
                 _ => c
             };
         }

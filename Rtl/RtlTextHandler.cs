@@ -9,8 +9,6 @@ namespace PicoShot.Localization.Rtl
     /// </summary>
     public static class RtlTextHandler
     {
-        private static readonly StringBuilder MultilineBuilder = new(1024);
-
         /// <summary>
         /// Fixes RTL text for proper display.
         /// </summary>
@@ -29,12 +27,7 @@ namespace PicoShot.Localization.Rtl
             if (string.IsNullOrEmpty(text))
                 return text;
 
-            if (text.Contains("\n") && !text.Contains(Environment.NewLine))
-            {
-                text = text.Replace("\n", Environment.NewLine);
-            }
-
-            if (!text.Contains(Environment.NewLine))
+            if (text.IndexOf('\n') < 0 && text.IndexOf("\r\n", StringComparison.Ordinal) < 0)
             {
                 return RtlTextFixer.FixLine(text, options);
             }
@@ -47,25 +40,25 @@ namespace PicoShot.Localization.Rtl
         /// </summary>
         private static string FixMultiline(string text, RtlFixOptions options)
         {
-            string[] lines = text.Split(new[] { Environment.NewLine }, StringSplitOptions.None);
-            
+            // Normalize line endings to \n for consistent processing
+            string normalized = text.Replace("\r\n", "\n");
+            string[] lines = normalized.Split('\n');
+
             if (lines.Length <= 1)
             {
-                return RtlTextFixer.FixLine(text, options);
+                return RtlTextFixer.FixLine(normalized, options);
             }
 
-            MultilineBuilder.Clear();
-            MultilineBuilder.EnsureCapacity(text.Length);
-
-            MultilineBuilder.Append(RtlTextFixer.FixLine(lines[0], options));
+            var sb = new StringBuilder(text.Length + lines.Length);
+            sb.Append(RtlTextFixer.FixLine(lines[0], options));
 
             for (int i = 1; i < lines.Length; i++)
             {
-                MultilineBuilder.Append(Environment.NewLine);
-                MultilineBuilder.Append(RtlTextFixer.FixLine(lines[i], options));
+                sb.Append('\n');
+                sb.Append(RtlTextFixer.FixLine(lines[i], options));
             }
 
-            return MultilineBuilder.ToString();
+            return sb.ToString();
         }
     }
 }

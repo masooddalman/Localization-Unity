@@ -602,7 +602,7 @@ namespace PicoShot.Localization
             EditorGUILayout.LabelField("Current Language:", GUILayout.Width(120));
 
             var currentLang = LocalizationManager.CurrentLanguage;
-            var content = new GUIContent(LanguageDefinitions.GetDisplayName(currentLang));
+            var content = new GUIContent(LanguageDefinitions.GetDisplayName(currentLang ?? string.Empty));
             var dropdownRect = EditorGUILayout.GetControlRect(GUILayout.ExpandWidth(true));
 
             if (EditorGUI.DropdownButton(dropdownRect, content, FocusType.Keyboard))
@@ -614,7 +614,8 @@ namespace PicoShot.Localization
 
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.LabelField("System Language:", GUILayout.Width(120));
-            EditorGUILayout.LabelField(LanguageDefinitions.GetDisplayName(LanguageDefinitions.FromSystemLanguage(Application.systemLanguage)));
+            var systemLangCode = LanguageDefinitions.FromSystemLanguage(Application.systemLanguage);
+            EditorGUILayout.LabelField(LanguageDefinitions.GetDisplayName(systemLangCode ?? string.Empty));
 
             if (GUILayout.Button("Use System Language", GUILayout.Width(150)))
             {

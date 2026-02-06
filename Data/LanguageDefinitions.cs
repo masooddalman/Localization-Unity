@@ -316,6 +316,8 @@ namespace PicoShot.Localization.Data
         /// </summary>
         public static string GetDisplayName(string languageCode, bool native = false)
         {
+            if (string.IsNullOrEmpty(languageCode))
+                return "Not Initialized";
             var dictionary = native ? NativeLanguageNames : LanguageNames;
             return dictionary.TryGetValue(languageCode, out var name) ? name : languageCode;
         }

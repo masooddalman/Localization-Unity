@@ -29,7 +29,9 @@ namespace PicoShot.Localization
         private const float _keyItemHeight = 22f;
         private const string DeeplApiUrl = "https://api-free.deepl.com/v2/translate";
         private const string DeeplApiKeyPref = "PicoShot_Localization_DeepLApiKey";
+        private const string DeeplContextPref = "PicoShot_Localization_DeepLContext";
         private const int DeeplRequestDelayMs = 350;
+        private const string DefaultDeepLContext = "This is text for a game locale. The translation should be concise and suitable for game UI.";
 
         /// <summary>
         /// Gets or sets the DeepL API key from EditorPrefs
@@ -38,6 +40,15 @@ namespace PicoShot.Localization
         {
             get => EditorPrefs.GetString(DeeplApiKeyPref, "");
             set => EditorPrefs.SetString(DeeplApiKeyPref, value);
+        }
+
+        /// <summary>
+        /// Gets or sets the DeepL context from EditorPrefs for improving translation quality
+        /// </summary>
+        private string DeeplContext
+        {
+            get => EditorPrefs.GetString(DeeplContextPref, DefaultDeepLContext);
+            set => EditorPrefs.SetString(DeeplContextPref, value);
         }
         private string _keySearchFilter = "";
         private string _newKey = "";
@@ -1486,6 +1497,14 @@ namespace PicoShot.Localization
             GUI.enabled = true;
             EditorGUILayout.EndHorizontal();
 
+            EditorGUILayout.Space(5);
+            EditorGUILayout.LabelField("Translation Context:", GUILayout.Width(150));
+            string newContext = EditorGUILayout.TextArea(DeeplContext, GUILayout.MinHeight(60));
+            if (newContext != DeeplContext)
+            {
+                DeeplContext = newContext;
+            }
+
             EditorGUILayout.Space();
 
             EditorGUILayout.LabelField("File Operations", EditorStyles.boldLabel);
@@ -2192,8 +2211,7 @@ namespace PicoShot.Localization
                 text = new[] { text },
                 source_lang = deeplSourceLang,
                 target_lang = deeplTargetLang,
-                context = "This is text for a game locale. The translation should be concise and suitable for game."
-
+                context = DeeplContext
             };
 
             string jsonBody = JsonUtility.ToJson(requestBody);

@@ -32,8 +32,17 @@ namespace PicoShot.Localization
         private const string DeeplApiKeyPref = "PicoShot_Localization_DeepLApiKey";
         private const string DeeplContextPref = "PicoShot_Localization_DeepLContext";
         private const int DeeplRequestDelayMs = 350;
-        private const string DefaultDeepLContext = "This is text for a game locale. The translation should be concise and suitable for game UI.";
-        private const string KeyHintPrefPrefix = "PicoShot_Localization_KeyHint_";
+        private const string DefaultDeepLContext = "This is a game localization text. The translation should be concise and suitable for game UI.";
+
+        /// <summary>
+        /// Temporary translation hint for the currently selected key.
+        /// </summary>
+        private string _currentKeyHint = "";
+
+        /// <summary>
+        /// Tracks the last selected key
+        /// </summary>
+        private string _lastSelectedKey;
 
         /// <summary>
         /// Gets or sets the DeepL API URL from PlayerPrefs
@@ -63,19 +72,14 @@ namespace PicoShot.Localization
         }
 
         /// <summary>
-        /// Gets the translation hint for a specific
+        /// Clears the temporary translation hint when switching keys.
+        /// Also clears keyboard focus
         /// </summary>
-        private string GetKeyTranslationHint(string key)
+        private void ClearKeyHint()
         {
-            return PlayerPrefs.GetString(KeyHintPrefPrefix + key, "");
-        }
-
-        /// <summary>
-        /// Sets the translation hint for a specific key in PlayerPrefs
-        /// </summary>
-        private void SetKeyTranslationHint(string key, string hint)
-        {
-            PlayerPrefs.SetString(KeyHintPrefPrefix + key, hint);
+            _currentKeyHint = "";
+            GUIUtility.keyboardControl = 0;
+            Repaint();
         }
         private string _keySearchFilter = "";
         private string _newKey = "";
@@ -132,6 +136,8 @@ namespace PicoShot.Localization
         {
             _languageData ??= new Dictionary<string, Dictionary<string, object>>();
             _keys ??= new List<string>();
+            _currentKeyHint = "";
+            _lastSelectedKey = null;
 
             LoadLanguages();
             CompilationPipeline.compilationStarted += OnBeforeCompile;
@@ -416,20 +422,19 @@ namespace PicoShot.Localization
             EditorGUILayout.EndHorizontal();
         }
 
+        /// <summary>
+        /// Draws the translation hint field for DeepL context.
+        /// </summary>
         private void DrawTranslationHintField(string key)
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             EditorGUILayout.LabelField("Translation Hint (for DeepL):", EditorStyles.miniBoldLabel);
 
-            string currentHint = GetKeyTranslationHint(key);
-            string newHint = EditorGUILayout.TextArea(currentHint, GUILayout.MinHeight(40));
+            GUI.SetNextControlName($"TranslationHint_{key}");
+            string newHint = EditorGUILayout.TextArea(_currentKeyHint, GUILayout.MinHeight(40));
+            _currentKeyHint = newHint;
 
-            if (newHint != currentHint)
-            {
-                SetKeyTranslationHint(key, newHint);
-            }
-
-            if (string.IsNullOrEmpty(currentHint))
+            if (string.IsNullOrEmpty(_currentKeyHint))
             {
                 EditorGUILayout.LabelField($"Example: '{key}' should be translated as verb not noun",
                     EditorStyles.miniLabel);
@@ -441,6 +446,12 @@ namespace PicoShot.Localization
         private void DrawKeyDetailsPanel()
         {
             EditorGUILayout.BeginVertical(GUILayout.ExpandWidth(true));
+
+            if (_lastSelectedKey != _selectedKey)
+            {
+                ClearKeyHint();
+                _lastSelectedKey = _selectedKey;
+            }
 
             if (!string.IsNullOrEmpty(_selectedKey))
             {
@@ -2771,7 +2782,7 @@ namespace PicoShot.Localization
                 return;
             }
 
-            string keyHint = GetKeyTranslationHint(key);
+            string keyHint = _selectedKey == key ? _currentKeyHint : "";
 
             foreach (var lang in _languageCodes.Where(l => l != sourceLang))
             {

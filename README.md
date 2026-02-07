@@ -23,7 +23,7 @@ A lightweight, zero-runtime-dependency, high-performance localization system for
 Add the package via Unity Package Manager:
 
 ```
-https://github.com/PicoShot/Localization-Unity.git
+https://github.com/PicoShot/Localization-Unity.git?path=/Package
 ```
 
 ### 2. Create Language Files

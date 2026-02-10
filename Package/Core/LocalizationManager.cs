@@ -154,34 +154,40 @@ namespace PicoShot.Localization
 
             foreach (var file in blocFiles)
             {
-                string fileName = Path.GetFileNameWithoutExtension(file);
+                string fileName = Path.GetFileName(file);
+
+                if (!LocaleBlocSerializer.ValidateFile(file, out string languageCode) || string.IsNullOrEmpty(languageCode))
+                {
+                    Debug.LogWarning($"[LocalizationManager] Skipping invalid/corrupted file: {fileName}");
+                    continue;
+                }
 
                 if (config.ProtectionMode == ProtectionMode.SelectionOnly ||
                     config.ProtectionMode == ProtectionMode.Both)
                 {
-                    if (!config.SelectedLanguages.Contains(fileName))
-                        continue;
-                }
-
-                if (IsAntiTamperEnabled)
-                {
-                    string fileNameWithExt = Path.GetFileName(file);
-                    if (!VerifyFileHash(file, fileNameWithExt, config))
+                    if (!config.SelectedLanguages.Contains(languageCode))
                     {
-                        Debug.LogError($"[LocalizationManager] Hash verification failed for: {fileName}");
-                        OnLanguageLoadError?.Invoke($"File tampering detected: {fileName}");
+                        Debug.LogWarning($"[LocalizationManager] Skipping unauthorized language: {languageCode} ({fileName})");
                         continue;
                     }
                 }
 
-                _availableLanguages.Add(fileName);
-            }
-
-            if (config.IsProtectionEnabled && !_availableLanguages.Contains(config.DefaultLanguage))
-            {
-                if (File.Exists(GetLocaleFilePath(config.DefaultLanguage)))
+                if (IsAntiTamperEnabled)
                 {
-                    _availableLanguages.Add(config.DefaultLanguage);
+                    if (!VerifyFileHash(file, fileName, config))
+                    {
+                        Debug.LogError($"[LocalizationManager] Hash verification failed for: {languageCode} ({fileName})");
+                        OnLanguageLoadError?.Invoke($"File tampering detected: {languageCode}");
+                        continue;
+                    }
+                }
+
+                _availableLanguages.Add(languageCode);
+
+                string fileNameLanguage = Path.GetFileNameWithoutExtension(file);
+                if (!string.Equals(fileNameLanguage, languageCode, StringComparison.OrdinalIgnoreCase))
+                {
+                    Debug.LogWarning($"[LocalizationManager] File name mismatch: '{fileName}' contains language '{languageCode}'");
                 }
             }
 

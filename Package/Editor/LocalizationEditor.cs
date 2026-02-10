@@ -164,7 +164,6 @@ namespace PicoShot.Localization
         {
             if (_currentTab == newTab) return;
 
-            // Exit current tab
             if (_tabs.TryGetValue(_currentTab, out var currentTabInstance))
             {
                 currentTabInstance.OnExit();
@@ -172,7 +171,6 @@ namespace PicoShot.Localization
 
             _currentTab = newTab;
 
-            // Enter new tab
             if (_tabs.TryGetValue(newTab, out var newTabInstance))
             {
                 newTabInstance.OnEnter();
@@ -206,7 +204,6 @@ namespace PicoShot.Localization
 
             bool ctrlPressed = (Event.current.modifiers & EventModifiers.Control) != 0;
 
-            // Global shortcuts
             if (ctrlPressed && Event.current.keyCode == KeyCode.S)
             {
                 SaveLanguages();
@@ -214,7 +211,6 @@ namespace PicoShot.Localization
                 return;
             }
 
-            // Let current tab handle its shortcuts
             if (_tabs.TryGetValue(_currentTab, out var tab))
             {
                 if (tab.HandleKeyboardInput(Event.current))
@@ -252,8 +248,19 @@ namespace PicoShot.Localization
                 {
                     try
                     {
+                        if (!LocaleBlocSerializer.ValidateFile(file, out string langCode) || string.IsNullOrEmpty(langCode))
+                        {
+                            Debug.LogWarning($"[LocalizationEditor] Skipping invalid/corrupted file: {Path.GetFileName(file)}");
+                            continue;
+                        }
+
                         var localeData = LocalizationManager.LoadLocaleFromFile(file);
-                        string langCode = Path.GetFileNameWithoutExtension(file);
+
+                        if (localeData.LanguageCode != langCode)
+                        {
+                            Debug.LogWarning($"[LocalizationEditor] Language code mismatch in '{Path.GetFileName(file)}': " +
+                                $"header='{langCode}', content='{localeData.LanguageCode}'. Using header value.");
+                        }
 
                         if (!_data.LanguageCodes.Contains(langCode))
                         {
@@ -273,6 +280,12 @@ namespace PicoShot.Localization
 
                             _data.LanguageData[key][langCode] = value;
                         }
+
+                        string fileNameLanguage = Path.GetFileNameWithoutExtension(file);
+                        if (!string.Equals(fileNameLanguage, langCode, StringComparison.OrdinalIgnoreCase))
+                        {
+                            Debug.LogWarning($"[LocalizationEditor] File name mismatch: '{Path.GetFileName(file)}' contains language '{langCode}'");
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -280,7 +293,6 @@ namespace PicoShot.Localization
                     }
                 }
 
-                // Ensure all keys have entries for all languages
                 SyncMissingLanguageEntries();
                 SyncProtectionOnLoad();
             }
@@ -348,7 +360,6 @@ namespace PicoShot.Localization
         {
             try
             {
-                // Apply compression settings from config
                 ApplyCompressionSettings();
 
                 if (!Directory.Exists(LocalizationManager.LanguagesPath))
@@ -379,7 +390,6 @@ namespace PicoShot.Localization
                     LocalizationManager.SaveLocaleToFile(filePath, localeData);
                 }
 
-                // Sync protection settings
                 var config = LocalizationConfigProvider.Config;
                 config.SetSelectedLanguages(new List<string>(_data.LanguageCodes));
                 LocalizationConfigProvider.SaveConfig();
@@ -388,7 +398,6 @@ namespace PicoShot.Localization
                 ShowNotification(new GUIContent("Language data saved successfully!"));
                 Debug.Log("[LocalizationEditor] Language data saved.");
 
-                // Reload runtime if initialized
                 if (LocalizationManager.IsInitialized)
                 {
                     LocalizationManager.Dispose();

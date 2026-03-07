@@ -396,6 +396,43 @@ namespace PicoShot.Localization
             return text;
         }
 
+        public static string GetTextWithParamKeys(string key, params string[] args)
+        {
+            if (string.IsNullOrEmpty(key))
+            {
+                Debug.LogError("[LocalizationManager] GetText called with null or empty key");
+                return string.Empty;
+            }
+
+            if (!_isInitialized)
+            {
+                Initialize();
+            }
+
+            string text = GetRawText(key);
+
+            //* Rytiex
+            if (args != null && args.Length > 0)
+            {
+                string[] keyArgs = args;
+                for (int i = 0; i < args.Length; i++)
+                {
+                    string argKey = args[i];
+                    keyArgs[i] = GetRawText(argKey);
+                }
+
+                text = string.Format(text, keyArgs);
+            }
+            //*
+
+            if (IsRightToLeft)
+            {
+                text = RtlTextHandler.Fix(text);
+            }
+
+            return text;
+        }
+
         private static string GetRawText(string key)
         {
             if (_currentLanguageData != null && _currentLanguageData.TryGetValue(key, out var value))

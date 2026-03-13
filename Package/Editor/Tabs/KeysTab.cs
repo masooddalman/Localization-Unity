@@ -346,7 +346,8 @@ namespace PicoShot.Localization.Editor.Tabs
 
             for (int i = 0; i < array.Count; i++)
             {
-                if (elementDeleted) break;
+                if (elementDeleted)
+                    break;
 
                 EditorGUILayout.BeginVertical("box");
 
@@ -414,7 +415,7 @@ namespace PicoShot.Localization.Editor.Tabs
                 RenameKey();
 
             if (GUILayout.Button("Translate", GUILayout.Width(65)))
-                ShowTranslationOptionsMenu();
+                _ = _translationService.TranslateAndFill(Data.SelectedKey);
 
             if (GUILayout.Button("Copy", GUILayout.Width(55)))
                 ShowCopyKeyMenu();
@@ -437,18 +438,6 @@ namespace PicoShot.Localization.Editor.Tabs
 
             GUI.backgroundColor = Color.white;
             EditorGUILayout.EndHorizontal();
-        }
-
-        private void ShowTranslationOptionsMenu()
-        {
-            GenericMenu menu = new GenericMenu();
-
-            menu.AddItem(new GUIContent("Translate with DeepL"), false,
-                () => { _ = _translationService.TranslateAndFill(Data.SelectedKey); });
-
-            menu.AddItem(new GUIContent("Translate with Gemini (soon)"), false, null);
-
-            menu.ShowAsContext();
         }
 
         private void ShowCopyKeyMenu()
@@ -553,7 +542,8 @@ namespace PicoShot.Localization.Editor.Tabs
 
         public override bool HandleKeyboardInput(Event evt)
         {
-            if (evt.type != EventType.KeyDown || string.IsNullOrEmpty(Data.SelectedKey)) return false;
+            if (evt.type != EventType.KeyDown || string.IsNullOrEmpty(Data.SelectedKey))
+                return false;
 
             bool ctrlPressed = (evt.modifiers & EventModifiers.Control) != 0;
             var index = Data.Keys.IndexOf(Data.SelectedKey);
@@ -598,7 +588,8 @@ namespace PicoShot.Localization.Editor.Tabs
 
                 case KeyCode.Backspace:
                 case KeyCode.Delete:
-                    if (_pendingDelete) return false;
+                    if (_pendingDelete)
+                        return false;
                     _pendingDelete = true;
                     EditorApplication.delayCall += () =>
                     {
@@ -653,11 +644,13 @@ namespace PicoShot.Localization.Editor.Tabs
 
         private void AutoScrollToSelectedKey()
         {
-            if (string.IsNullOrEmpty(Data.SelectedKey)) return;
+            if (string.IsNullOrEmpty(Data.SelectedKey))
+                return;
 
             var filteredKeys = Data.GetFilteredKeys().ToList();
             int selectedIndex = filteredKeys.IndexOf(Data.SelectedKey);
-            if (selectedIndex < 0) return;
+            if (selectedIndex < 0)
+                return;
 
             float viewportHeight = WindowPosition.height - 300f;
             float itemTop = selectedIndex * LanguageEditorData.KeyItemHeight;

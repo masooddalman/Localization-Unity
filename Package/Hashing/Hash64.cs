@@ -8,6 +8,7 @@ namespace PicoShot.Localization.Hashing
         private const ulong FNV_PRIME = 1099511628211UL;
         private const ulong FNV_OFFSET_BASIS = 14695981039346656037UL;
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static long Create(ReadOnlySpan<char> buffer)
         {
             if (buffer.IsEmpty)
@@ -17,12 +18,9 @@ namespace PicoShot.Localization.Hashing
 
             foreach (char c in buffer)
             {
-                byte b = (byte)c;
-
-                hash ^= b;
+                hash ^= c;
                 hash *= FNV_PRIME;
             }
-            
 
             return (long)hash;
         }

@@ -283,10 +283,10 @@ namespace PicoShot.Localization
                             if (!_data.Keys.Contains(key))
                             {
                                 _data.Keys.Add(key);
-                                _data.LanguageData[key] = new Dictionary<string, object>();
+                                _data.LanguageData[key] = new Dictionary<string, object>(_data.LanguageCodes.Count);
                             }
-
-                            _data.LanguageData[key][langCode] = value;
+                            else
+                                _data.LanguageData[key][langCode] = value;
                         }
                     }
                     catch (Exception ex)

@@ -6,8 +6,10 @@ using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using PicoShot.Localization.Config;
 using PicoShot.Localization.Data;
+using PicoShot.Localization.Hashing;
 using PicoShot.Localization.Rtl;
 using TMPro;
+using Unity.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -71,8 +73,8 @@ namespace PicoShot.Localization
         private static string _currentLanguageCode;
         private static bool _isInitialized;
 
-        private static Dictionary<string, object> _currentLanguageData;
-        private static Dictionary<string, object> _fallbackLanguageData;
+        private static LanguageDictionary _currentLanguageData;
+        private static LanguageDictionary _fallbackLanguageData;
 
         private static HashSet<string> _allTranslationKeys;
         private static HashSet<string> _availableLanguages;
@@ -132,7 +134,7 @@ namespace PicoShot.Localization
             }
             catch (Exception ex)
             {
-                string error = $"[LocalizationManager] Initialization failed: {ex.Message}";
+                string error = $"[LocalizationManager] Initialization failed: {ex}";
                 Debug.LogError(error);
                 OnLanguageLoadError?.Invoke(error);
                 _isInitialized = false;
@@ -215,7 +217,7 @@ namespace PicoShot.Localization
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError($"[LocalizationManager] Failed to load default language keys: {ex.Message}");
+                    Debug.LogError($"[LocalizationManager] Failed to load default language keys: {ex}");
                 }
             }
         }
@@ -290,7 +292,7 @@ namespace PicoShot.Localization
             }
         }
 
-        private static Dictionary<string, object> LoadLocaleFile(string languageCode)
+        private static LanguageDictionary LoadLocaleFile(string languageCode)
         {
             string filePath = GetLocaleFilePath(languageCode);
 
@@ -303,32 +305,15 @@ namespace PicoShot.Localization
 
             if (localeData?.Translations == null)
             {
-                return new Dictionary<string, object>(StringComparer.Ordinal);
+                return new LanguageDictionary(new Dictionary<string, object>());
             }
 
-            var result = new Dictionary<string, object>(localeData.Translations.Count, StringComparer.Ordinal);
-            foreach (var entry in localeData.Translations)
-            {
-                result[entry.Key] = NormalizeValue(entry.Value);
-            }
-
-            return result;
+            return new LanguageDictionary(localeData.Translations);
         }
 
         private static string GetLocaleFilePath(string languageCode)
         {
             return Path.Combine(LanguagesPath, $"{languageCode}{FileExtension}");
-        }
-
-        private static object NormalizeValue(object value)
-        {
-            return value switch
-            {
-                null => null,
-                List<string> list => list,
-                string[] arr => new List<string>(arr),
-                _ => value?.ToString()
-            };
         }
 
         private static bool VerifyFileHash(string filePath, string fileName, LocalizationConfig config)
@@ -401,6 +386,7 @@ namespace PicoShot.Localization
                         _ => args[i].ToString()
                     };
                 }
+                
                 text = string.Format(text, resolvedArgs);
             }
 
@@ -410,6 +396,52 @@ namespace PicoShot.Localization
             }
 
             return text;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static string GetText(long keyHash, params object[] args)
+        {
+            if (keyHash == 0)
+            {
+                Debug.LogError("[LocalizationManager] GetText called with null or empty key");
+                return string.Empty;
+            }
+
+            if (!_isInitialized)
+            {
+                Initialize();
+            }
+
+            string text = GetRawText(keyHash);
+
+            if (args != null && args.Length > 0)
+            {
+                var resolvedArgs = new string[args.Length];
+                for (int i = 0; i < args.Length; i++)
+                {
+                    resolvedArgs[i] = args[i] switch
+                    {
+                        Key k => GetRawText(k.Value),
+                        null => string.Empty,
+                        string s => s,
+                        _ => args[i].ToString()
+                    };
+                }
+                text = string.Format(text, resolvedArgs);
+            }
+
+            if (IsRightToLeft)
+            {
+                text = RtlTextHandler.Fix(text);
+            }
+
+            return text;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static long GetKeyHash(string key)
+        {
+            return Hash64.Create(key);
         }
 
         /// <summary>
@@ -455,24 +487,27 @@ namespace PicoShot.Localization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static string GetRawText(string key)
         {
+            long keyHash = Hash64.Create(key);
+
             int foundIndex = -1;
-            if (key.EndsWith("]"))
+            if (key[^1] == ']')
             {
-                int start = key.LastIndexOf("[");
-
-                if (start > -1)
+                for (int i = key.Length - 1; i >= 0; i--)
                 {
-                    string idText = key.Substring(start + 1, key.Length - (start + 2));
+                    if (key[i] != '[')
+                        continue;
 
-                    if (int.TryParse(idText, out int idx))
+                    if (int.TryParse(key.AsSpan(i + 1, key.Length - (i + 2)), out int idx))
                     {
-                        key = key.Substring(0, start);
+                        keyHash = Hash64.Create(key.AsSpan(0, i));
                         foundIndex = idx;
                     }
+
+                    break;
                 }
             }
 
-            if (_currentLanguageData != null && _currentLanguageData.TryGetValue(key, out var value))
+            if (_currentLanguageData != null && _currentLanguageData.TryGetValue(keyHash, out var value))
             {
                 return value switch
                 {
@@ -481,7 +516,7 @@ namespace PicoShot.Localization
                 };
             }
 
-            if (_fallbackLanguageData != null && _fallbackLanguageData.TryGetValue(key, out var fallbackValue))
+            if (_fallbackLanguageData != null && _fallbackLanguageData.TryGetValue(keyHash, out var fallbackValue))
             {
                 OnMissingTranslation?.Invoke($"Using fallback for key '{key}' in '{_currentLanguageCode}'");
                 return fallbackValue switch
@@ -493,6 +528,32 @@ namespace PicoShot.Localization
 
             OnMissingTranslation?.Invoke($"Missing translation for key '{key}' in '{_currentLanguageCode}'");
             return key;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static string GetRawText(long keyHash)
+        {
+            if (_currentLanguageData != null && _currentLanguageData.TryGetValue(keyHash, out var value))
+            {
+                return value switch
+                {
+                    List<string> list => list.Count > 0 ? list[0] : keyHash.ToString(),
+                    _ => value?.ToString() ?? keyHash.ToString()
+                };
+            }
+
+            if (_fallbackLanguageData != null && _fallbackLanguageData.TryGetValue(keyHash, out var fallbackValue))
+            {
+                OnMissingTranslation?.Invoke($"Using fallback for key '{keyHash}' in '{_currentLanguageCode}'");
+                return fallbackValue switch
+                {
+                    List<string> list => list.Count > 0 ? list[0] : keyHash.ToString(),
+                    _ => fallbackValue?.ToString() ?? keyHash.ToString()
+                };
+            }
+
+            OnMissingTranslation?.Invoke($"Missing translation for key '{keyHash}' in '{_currentLanguageCode}'");
+            return keyHash.ToString();
         }
 
         /// <summary>
@@ -563,19 +624,19 @@ namespace PicoShot.Localization
         /// </summary>
         public static string GetArrayText(Key key, int index) => GetArrayText(key.Value, index);
 
-        private static string[] GetArrayInternal(string key)
+        private static string[] GetArrayInternal(Key key)
         {
             object value = null;
             bool found = false;
 
             if (_currentLanguageData != null)
             {
-                found = _currentLanguageData.TryGetValue(key, out value);
+                found = _currentLanguageData.TryGetValue(key.Hash, out value);
             }
 
             if (!found && _fallbackLanguageData != null)
             {
-                found = _fallbackLanguageData.TryGetValue(key, out value);
+                found = _fallbackLanguageData.TryGetValue(key.Hash, out value);
                 if (found)
                 {
                     OnMissingTranslation?.Invoke($"Using fallback for array key '{key}' in '{_currentLanguageCode}'");
@@ -912,19 +973,11 @@ namespace PicoShot.Localization
             OnLanguageLoadError = null;
             OnMissingTranslation = null;
 
-            _currentLanguageData?.Clear();
             _currentLanguageData = null;
-
-            _fallbackLanguageData?.Clear();
             _fallbackLanguageData = null;
 
-            _allTranslationKeys?.Clear();
             _allTranslationKeys = null;
-
-            _availableLanguages?.Clear();
             _availableLanguages = null;
-
-            _arrayCache?.Clear();
 
             _isInitialized = false;
         }

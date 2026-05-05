@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.IO.Hashing;
 using System.Linq;
 using System.Text;
 
@@ -59,7 +60,7 @@ namespace PicoShot.Localization.Data
                 WriteStringPool(writer, stringPool);
 
                 uncompressedData = ms.ToArray();
-                uint crc = ComputeCrc32(uncompressedData, 0, uncompressedData.Length);
+                uint crc = ComputeCrc32(uncompressedData);
 
                 ms.Position = 0;
                 writer.Write(uncompressedData, 0, uncompressedData.Length);
@@ -96,6 +97,27 @@ namespace PicoShot.Localization.Data
         /// </summary>
         public static LocaleData Deserialize(byte[] data)
         {
+            static byte[] DecompressData(byte[] compressedData, int offset, int count, int uncompressedSize)
+            {
+                using var inputMs = new MemoryStream(compressedData, offset, count);
+
+                byte[] result = new byte[uncompressedSize];
+
+                using var deflateStream = new DeflateStream(inputMs, CompressionMode.Decompress, true);
+
+                int totalRead = 0;
+                while (totalRead < uncompressedSize)
+                {
+                    int read = deflateStream.Read(result, 0, uncompressedSize - totalRead);
+                    totalRead += read;
+
+                    if (read == 0)
+                        throw new InvalidDataException("Decompression incomplete");
+                }
+
+                return result;
+            }
+
             if (data == null || data.Length < 36) // Header (32) + CRC32 (4)
                 throw new ArgumentException("Data too short", nameof(data));
 
@@ -150,6 +172,175 @@ namespace PicoShot.Localization.Data
         }
 
         /// <summary>
+        /// Deserializes BLOC format data.
+        /// </summary>
+        /*
+        public static LocaleData Deserialize(Stream stream)
+        {
+            using var reader = new BinaryReader(stream, Encoding.UTF8, true);
+
+            if (stream == null || stream.Length < 36) // Header (32) + CRC32 (4)
+                throw new ArgumentException("Data too short", nameof(stream));
+
+
+            // Verify magic
+            Span<byte> magic = stackalloc byte[Magic.Length];
+            reader.Read(magic);//4
+
+            if (magic[0] != Magic[0] || magic[1] != Magic[1] ||
+                magic[2] != Magic[2] || magic[3] != Magic[3])
+                throw new InvalidDataException("Invalid BLOC magic");
+
+            // Check version
+            ushort version = reader.ReadUInt16();//6
+            if (version != Version)
+                throw new InvalidDataException($"Version {version} not supported");
+
+            // Check compression flag
+            ushort flags = reader.ReadUInt16();//8
+            bool isCompressed = (flags & FlagCompressed) != 0;
+
+            Span<byte> languageData = stackalloc byte[LanguageCodeSize];
+            reader.Read(languageData);//20
+
+            int len = 0;
+            while (len < LanguageCodeSize && languageData[len] != 0) len++;
+            string languageCode = Encoding.ASCII.GetString(languageData.Slice(0, len));
+
+            uint entryCount = reader.ReadUInt32();//24
+            uint stringCount = reader.ReadUInt32();//28
+            uint stringPoolOffset = reader.ReadUInt32();//32
+
+            byte[] uncompressedData = null;
+            if (isCompressed)
+            {
+                int uncompressedSize = (int)stringPoolOffset;
+                if (uncompressedSize < 0 || uncompressedSize > 100_000_000) // 100MB sanity check
+                    throw new InvalidDataException("Invalid uncompressed size");
+
+                using var compContentData = new MemoryStream();
+                using var contentData = new MemoryStream();
+
+                stream.CopyTo(compContentData, (int)stream.Length - 4 - 32);
+                using var deflateStream = new DeflateStream(compContentData, CompressionMode.Decompress);
+
+                deflateStream.CopyTo(contentData);
+
+                uncompressedData = contentData.ToArray();
+            }
+            else
+            {
+                uncompressedData = new byte[stream.Length - 4 - 32];
+                reader.Read(uncompressedData);
+            }
+
+            stream.Position = stream.Length - 4;
+
+            uint savedCrc = reader.ReadUInt32(); 
+            uint contentCrc = ComputeCrc32(uncompressedData);
+
+            if (savedCrc != contentCrc)
+                throw new FileLoadException("File damaged");
+
+            using Stream contentStream = new MemoryStream(uncompressedData);
+            using var contentReader = new BinaryReader(contentStream, Encoding.UTF8);
+
+            // Read header
+            var translations = ReadEntryTable(contentReader, entryCount, stringPoolOffset, stringCount);
+
+            return new LocaleData
+            {
+                Version = version,
+                LanguageCode = languageCode,
+                Translations = translations
+            };
+        }
+*/
+
+        public static LocaleData Deserialize(Stream stream)
+        {
+            if (stream == null || stream.Length < 36)
+                throw new ArgumentException("Data too short", nameof(stream));
+
+            using var reader = new BinaryReader(stream, Encoding.UTF8, true);
+
+            // 1. Magic Verify (4 byte)
+            Span<byte> magic = stackalloc byte[4];
+            reader.Read(magic);
+            if (!magic.SequenceEqual(Magic.AsSpan()))
+                throw new InvalidDataException("Invalid BLOC magic");
+
+            // 2. Version (2 byte) ve Flags (2 byte)
+            ushort version = reader.ReadUInt16();
+            ushort flags = reader.ReadUInt16();
+            bool isCompressed = (flags & FlagCompressed) != 0;
+
+            // 3. Language Code (12 byte)
+            Span<byte> languageData = stackalloc byte[12]; // LanguageCodeSize = 12
+            reader.Read(languageData);
+            int len = 0;
+            while (len < 12 && languageData[len] != 0) len++;
+            string languageCode = Encoding.ASCII.GetString(languageData.Slice(0, len));
+
+            // 4. Counts ve Offset/Size (12 byte)
+            uint entryCount = reader.ReadUInt32();
+            uint stringCount = reader.ReadUInt32();
+            uint stringPoolOffsetOrSize = reader.ReadUInt32(); // Sýkýþtýrýlmýþsa bu Uncompressed Size'dýr
+
+            byte[] uncompressedData;
+
+            if (isCompressed)
+            {
+                int uncompressedSize = (int)stringPoolOffsetOrSize;
+                int compressedDataLength = (int)stream.Length - 32;
+
+                using var msInput = new MemoryStream(compressedDataLength);
+                stream.CopyTo(msInput, compressedDataLength);
+                msInput.Position = 0;
+
+                using var deflateStream = new DeflateStream(msInput, CompressionMode.Decompress);
+
+                uncompressedData = new byte[uncompressedSize];
+
+                int totalRead = 0; 
+                while (totalRead < uncompressedSize)
+                {
+                    int r = deflateStream.Read(uncompressedData, totalRead, uncompressedSize - totalRead);
+
+                    if (r == 0) 
+                        break;
+
+                    totalRead += r;
+                }
+            }
+            else
+            {
+                int dataSize = (int)stream.Length - 32 - 4;
+                uncompressedData = reader.ReadBytes(dataSize);
+
+                uint savedCrc = reader.ReadUInt32();
+                uint contentCrc = ComputeCrc32(uncompressedData);
+
+                if (savedCrc != contentCrc)
+                    throw new FileLoadException("File damaged (CRC mismatch)");
+            }
+
+            using var contentStream = new MemoryStream(uncompressedData);
+            using var contentReader = new BinaryReader(contentStream, Encoding.UTF8);
+
+            var header = ReadHeader(contentReader);
+
+            //contentStream.Position = 32;
+            var translations = ReadEntryTable(contentReader, header.EntryCount, header.StringPoolOffset, header.StringCount);
+
+            return new LocaleData
+            {
+                Version = version,
+                LanguageCode = languageCode,
+                Translations = translations
+            };
+        }
+        /// <summary>
         /// Deserializes BLOC data from a file.
         /// </summary>
         public static LocaleData DeserializeFromFile(string path)
@@ -157,8 +348,11 @@ namespace PicoShot.Localization.Data
             if (!File.Exists(path))
                 throw new FileNotFoundException("BLOC file not found", path);
 
-            byte[] data = File.ReadAllBytes(path);
-            return Deserialize(data);
+            //byte[] data = File.ReadAllBytes(path);
+            //return Deserialize(data);
+
+            var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            return Deserialize(stream);
         }
 
         /// <summary>
@@ -186,20 +380,20 @@ namespace PicoShot.Localization.Data
             return outputMs.ToArray();
         }
 
-        private static byte[] DecompressData(byte[] compressedData, int offset, int count, int uncompressedSize)
+        private static byte[] DecompressData(Stream inputStream, int uncompressedSize)
         {
             byte[] result = new byte[uncompressedSize];
 
-            using var inputMs = new MemoryStream(compressedData, offset, count);
-            using var deflateStream = new DeflateStream(inputMs, CompressionMode.Decompress);
+            using var deflateStream = new DeflateStream(inputStream, CompressionMode.Decompress, true);
 
             int totalRead = 0;
             while (totalRead < uncompressedSize)
             {
-                int read = deflateStream.Read(result, totalRead, uncompressedSize - totalRead);
+                int read = deflateStream.Read(result, 0, uncompressedSize - totalRead);
+                totalRead += read;
+
                 if (read == 0)
                     throw new InvalidDataException("Decompression incomplete");
-                totalRead += read;
             }
 
             return result;
@@ -463,12 +657,12 @@ namespace PicoShot.Localization.Data
 
         #region Checksum
 
-        private static uint ComputeCrc32(byte[] data, int offset, int count)
+        private static uint ComputeCrc32(ReadOnlySpan<byte> data)
         {
             const uint polynomial = 0xEDB88320;
             uint crc = 0xFFFFFFFF;
 
-            for (int i = offset; i < offset + count; i++)
+            for (int i = 0; i < data.Length; i++)
             {
                 crc ^= data[i];
                 for (int j = 0; j < 8; j++)
@@ -501,7 +695,7 @@ namespace PicoShot.Localization.Data
                     return false;
 
                 byte[] data = File.ReadAllBytes(path);
-                
+
                 // Minimum: header (32) + CRC32 (4) = 36
                 if (data.Length < 36)
                     return false;
@@ -536,7 +730,7 @@ namespace PicoShot.Localization.Data
 
                 // Validate CRC32 for uncompressed files
                 uint storedCrc = BitConverter.ToUInt32(data, data.Length - 4);
-                uint computedCrc = ComputeCrc32(data, 0, data.Length - 4);
+                uint computedCrc = ComputeCrc32(data.AsSpan(0, data.Length - 4));
 
                 return storedCrc == computedCrc;
             }

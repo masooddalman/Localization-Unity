@@ -48,9 +48,28 @@ namespace PicoShot.Localization
             get
             {
 #if UNITY_STANDALONE || UNITY_EDITOR
-                return Path.Combine(
-                    Path.GetDirectoryName(Application.dataPath),
-                    LanguagesDirectory);
+                string projectPath = Path.GetDirectoryName(Application.dataPath);
+                if (projectPath != null)
+                {
+                    string normalizedPath = projectPath.Replace('\\', '/');
+                    int searchIndex = 0;
+                    while (true)
+                    {
+                        int libraryIndex = normalizedPath.IndexOf("/Library/", searchIndex, StringComparison.OrdinalIgnoreCase);
+                        if (libraryIndex < 0)
+                            break;
+
+                        string candidatePath = projectPath.Substring(0, libraryIndex);
+                        if (Directory.Exists(Path.Combine(candidatePath, "Assets")) &&
+                            Directory.Exists(Path.Combine(candidatePath, "ProjectSettings")))
+                        {
+                            projectPath = candidatePath;
+                            break;
+                        }
+                        searchIndex = libraryIndex + 1;
+                    }
+                }
+                return Path.Combine(projectPath ?? string.Empty, LanguagesDirectory);
 #else
                 return Path.Combine(Application.streamingAssetsPath, LanguagesDirectory);
 #endif
@@ -72,12 +91,41 @@ namespace PicoShot.Localization
         /// </summary>
         public static IReadOnlyList<string> SelectedLanguages => LocalizationConfigProvider.Config.SelectedLanguages;
 
+        private static bool IsCloneEditor()
+        {
+#if UNITY_EDITOR
+            string projectPath = Path.GetDirectoryName(Application.dataPath);
+            if (projectPath == null) return false;
+
+            string normalized = projectPath.Replace('\\', '/');
+            int searchIndex = 0;
+            while (true)
+            {
+                int libraryIndex = normalized.IndexOf("/Library/", searchIndex, StringComparison.OrdinalIgnoreCase);
+                if (libraryIndex < 0)
+                    break;
+
+                string candidatePath = projectPath.Substring(0, libraryIndex);
+                if (Directory.Exists(Path.Combine(candidatePath, "Assets")) &&
+                    Directory.Exists(Path.Combine(candidatePath, "ProjectSettings")))
+                {
+                    return true;
+                }
+                searchIndex = libraryIndex + 1;
+            }
+            return false;
+#else
+            return false;
+#endif
+        }
+
         #endregion
 
         #region State
 
         private static string _currentLanguageCode;
         private static bool _isInitialized;
+        private static bool _initializationAttempted;
 
         private static LanguageDictionary _currentLanguageData;
         private static LanguageDictionary _fallbackLanguageData;
@@ -85,7 +133,6 @@ namespace PicoShot.Localization
         private static HashSet<string> _allTranslationKeys;
         private static HashSet<string> _availableLanguages;
 
-        // Cache for string arrays to avoid repeated conversions
         private static readonly Dictionary<string, string[]> _arrayCache = new(StringComparer.Ordinal);
 
         #endregion
@@ -121,13 +168,15 @@ namespace PicoShot.Localization
         public static void Initialize()
         {
             if (_isInitialized) return;
+            if (_initializationAttempted) return;
 
+            _initializationAttempted = true;
             _isInitialized = true;
 
             try
             {
 #if UNITY_EDITOR
-            DeleteJunkFiles();
+                DeleteJunkFiles();
 #endif
 
                 ScanAvailableLanguages();
@@ -135,7 +184,14 @@ namespace PicoShot.Localization
                 if (_availableLanguages.Count == 0)
                 {
                     string error = $"[LocalizationManager] No language files found in: {LanguagesPath}";
-                    Debug.LogError(error);
+                    if (IsCloneEditor())
+                    {
+                        Debug.LogWarning($"[LocalizationManager] (Clone Editor) No language files found in: {LanguagesPath}");
+                    }
+                    else
+                    {
+                        Debug.LogError(error);
+                    }
                     OnLanguageLoadError?.Invoke(error);
                     _isInitialized = false;
                     return;
@@ -153,7 +209,14 @@ namespace PicoShot.Localization
             catch (Exception ex)
             {
                 string error = $"[LocalizationManager] Initialization failed: {ex}";
-                Debug.LogError(error);
+                if (IsCloneEditor())
+                {
+                    Debug.LogWarning($"[LocalizationManager] (Clone Editor) Initialization failed: {ex.Message}");
+                }
+                else
+                {
+                    Debug.LogError(error);
+                }
                 OnLanguageLoadError?.Invoke(error);
                 _isInitialized = false;
             }
@@ -161,24 +224,32 @@ namespace PicoShot.Localization
 
         public static void DeleteJunkFiles()
         {
-            if (!Directory.Exists(LanguagesPath))
-                return;
-
-            var junkExtensions = new[] { ".bak", ".tmp" };
-
-            var filesToDelete = Directory.EnumerateFiles(LanguagesPath, "*.*", SearchOption.TopDirectoryOnly)
-            .Where(f => junkExtensions.Contains(Path.GetExtension(f).ToLower()));
-
-            foreach (var file in filesToDelete)
+            try
             {
-                try
-                {
-                    File.Delete(file);
-                }
-                catch (Exception)
-                {
+                if (!Directory.Exists(LanguagesPath))
+                    return;
 
+                File.GetAttributes(LanguagesPath);
+
+                var junkExtensions = new[] { ".bak", ".tmp" };
+
+                var filesToDelete = Directory.EnumerateFiles(LanguagesPath, "*.*", SearchOption.TopDirectoryOnly)
+                    .Where(f => junkExtensions.Contains(Path.GetExtension(f).ToLower()));
+
+                foreach (var file in filesToDelete)
+                {
+                    try
+                    {
+                        File.Delete(file);
+                    }
+                    catch (Exception)
+                    {
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[LocalizationManager] Failed to delete junk files: {ex.Message}");
             }
         }
 
@@ -187,79 +258,88 @@ namespace PicoShot.Localization
             _availableLanguages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             _allTranslationKeys = new HashSet<string>(StringComparer.Ordinal);
 
-            if (!Directory.Exists(LanguagesPath))
+            try
             {
-                Debug.LogWarning($"[LocalizationManager] Languages directory not found: {LanguagesPath}");
-                return;
-            }
-
-            var blocFiles = Directory.GetFiles(LanguagesPath, $"*{FileExtension}", SearchOption.TopDirectoryOnly);
-            var config = LocalizationConfigProvider.Config;
-
-            foreach (var file in blocFiles)
-            {
-                string fileName = Path.GetFileName(file);
-
-                if (!LocaleBlocSerializer.ValidateFile(file, out _, out string languageCode) || string.IsNullOrEmpty(languageCode))
+                if (!Directory.Exists(LanguagesPath))
                 {
-                    Debug.LogWarning($"[LocalizationManager] Skipping invalid/corrupted file: {fileName}");
-                    continue;
+                    Debug.LogWarning($"[LocalizationManager] Languages directory not found: {LanguagesPath}");
+                    return;
                 }
 
-                if (!LanguageDefinitions.IsValidLanguage(languageCode))
-                {
-                    Debug.LogError($"[LocalizationManager] Rejecting file '{fileName}' - unsupported language code: '{languageCode}'");
-                    OnLanguageLoadError?.Invoke($"Unsupported language: {languageCode}");
-                    continue;
-                }
+                File.GetAttributes(LanguagesPath);
 
-                if (config.ProtectionMode == ProtectionMode.SelectionOnly ||
-                    config.ProtectionMode == ProtectionMode.Both)
+                var blocFiles = Directory.GetFiles(LanguagesPath, $"*{FileExtension}", SearchOption.TopDirectoryOnly);
+                var config = LocalizationConfigProvider.Config;
+
+                foreach (var file in blocFiles)
                 {
-                    if (!config.SelectedLanguages.Contains(languageCode))
+                    string fileName = Path.GetFileName(file);
+
+                    if (!LocaleBlocSerializer.ValidateFile(file, out _, out string languageCode) || string.IsNullOrEmpty(languageCode))
                     {
-                        Debug.LogWarning($"[LocalizationManager] Skipping unauthorized language: {languageCode} ({fileName})");
+                        Debug.LogWarning($"[LocalizationManager] Skipping invalid/corrupted file: {fileName}");
                         continue;
                     }
-                }
 
-                if (IsAntiTamperEnabled)
-                {
-                    if (!VerifyFileHash(file, fileName, config))
+                    if (!LanguageDefinitions.IsValidLanguage(languageCode))
                     {
-                        Debug.LogError($"[LocalizationManager] Hash verification failed for: {languageCode} ({fileName})");
-                        OnLanguageLoadError?.Invoke($"File tampering detected: {languageCode}");
+                        Debug.LogError($"[LocalizationManager] Rejecting file '{fileName}' - unsupported language code: '{languageCode}'");
+                        OnLanguageLoadError?.Invoke($"Unsupported language: {languageCode}");
                         continue;
                     }
-                }
 
-                string fileNameLanguage = Path.GetFileNameWithoutExtension(file);
-                if (!string.Equals(fileNameLanguage, languageCode, StringComparison.OrdinalIgnoreCase))
-                {
-                    Debug.LogError($"[LocalizationManager] Rejecting file '{fileName}' - filename mismatch: " +
-                        $"expected '{languageCode}{FileExtension}' but found '{fileName}'. " +
-                        $"Filename must match the language code stored in the file header.");
-                    OnLanguageLoadError?.Invoke($"Invalid filename: {fileName}");
-                    continue;
-                }
-
-                _availableLanguages.Add(languageCode);
-            }
-
-            if (_availableLanguages.Contains(config.DefaultLanguage))
-            {
-                try
-                {
-                    var defaultData = LoadLocaleFile(config.DefaultLanguage);
-                    foreach (var key in defaultData.Keys)
+                    if (config.ProtectionMode == ProtectionMode.SelectionOnly ||
+                        config.ProtectionMode == ProtectionMode.Both)
                     {
-                        _allTranslationKeys.Add(key);
+                        if (!config.SelectedLanguages.Contains(languageCode))
+                        {
+                            Debug.LogWarning($"[LocalizationManager] Skipping unauthorized language: {languageCode} ({fileName})");
+                            continue;
+                        }
+                    }
+
+                    if (IsAntiTamperEnabled)
+                    {
+                        if (!VerifyFileHash(file, fileName, config))
+                        {
+                            Debug.LogError($"[LocalizationManager] Hash verification failed for: {languageCode} ({fileName})");
+                            OnLanguageLoadError?.Invoke($"File tampering detected: {languageCode}");
+                            continue;
+                        }
+                    }
+
+                    string fileNameLanguage = Path.GetFileNameWithoutExtension(file);
+                    if (!string.Equals(fileNameLanguage, languageCode, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Debug.LogError($"[LocalizationManager] Rejecting file '{fileName}' - filename mismatch: " +
+                            $"expected '{languageCode}{FileExtension}' but found '{fileName}'. " +
+                            $"Filename must match the language code stored in the file header.");
+                        OnLanguageLoadError?.Invoke($"Invalid filename: {fileName}");
+                        continue;
+                    }
+
+                    _availableLanguages.Add(languageCode);
+                }
+
+                if (_availableLanguages.Contains(config.DefaultLanguage))
+                {
+                    try
+                    {
+                        var defaultData = LoadLocaleFile(config.DefaultLanguage);
+                        foreach (var key in defaultData.Keys)
+                        {
+                            _allTranslationKeys.Add(key);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogError($"[LocalizationManager] Failed to load default language keys: {ex}");
                     }
                 }
-                catch (Exception ex)
-                {
-                    Debug.LogError($"[LocalizationManager] Failed to load default language keys: {ex}");
-                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[LocalizationManager] Languages directory is not accessible: {ex.Message}");
             }
         }
 
@@ -1010,6 +1090,7 @@ namespace PicoShot.Localization
             _availableLanguages = null;
 
             _isInitialized = false;
+            _initializationAttempted = false;
         }
 
         #endregion

@@ -3,7 +3,6 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
-using System.IO.Hashing;
 using System.Runtime.InteropServices;
 using System.Text;
 using PicoShot.Localization.Utils;
@@ -388,6 +387,26 @@ namespace PicoShot.Localization.Bloc
         {
             None = 0,
             IsCompressed = 1 << 0,
+        }
+    }
+
+    public class Crc32
+    {
+        private uint _crc = 0xFFFFFFFF;
+
+        public void Reset()
+        {
+            _crc = 0xFFFFFFFF;
+        }
+
+        public void Append(ReadOnlySpan<byte> data)
+        {
+            BlocFormat.ComputeCrc32(ref _crc, data);
+        }
+
+        public uint GetCurrentHashAsUInt32()
+        {
+            return ~_crc;
         }
     }
 }

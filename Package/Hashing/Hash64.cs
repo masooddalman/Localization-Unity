@@ -3,7 +3,7 @@ using System.Runtime.CompilerServices;
 
 namespace PicoShot.Localization.Hashing
 {
-    public unsafe static class Hash64
+    public static class Hash64
     {
         private const ulong FNV_PRIME = 1099511628211UL;
         private const ulong FNV_OFFSET_BASIS = 14695981039346656037UL;
@@ -116,52 +116,6 @@ namespace PicoShot.Localization.Hashing
 
             return (long)hash;
         }
-
-        public static long CreateFromUnmanaged<T>(T value) where T : unmanaged
-        {
-            int size = Unsafe.SizeOf<T>();
-            ulong hash = FNV_OFFSET_BASIS;
-
-            byte* ptr = (byte*)&value;
-            for (int i = 0; i < size; i++)
-            {
-                hash ^= ptr[i];
-                hash *= FNV_PRIME;
-            }
-
-            return (long)hash;
-        }
-        public static long CreateFromUnmanaged<T>(ref T value) where T : unmanaged
-        {
-            int size = Unsafe.SizeOf<T>();
-            ulong hash = FNV_OFFSET_BASIS;
-
-            fixed (T* ptr = &value)
-            {
-                for (int i = 0; i < size; i++)
-                {
-                    hash ^= ((byte*)ptr)[i];
-                    hash *= FNV_PRIME;
-                }
-            }
-
-            return (long)hash;
-        }
-        public static long CreateFromUnmanaged<T>(T* value) where T : unmanaged
-        {
-            int size = Unsafe.SizeOf<T>();
-            ulong hash = FNV_OFFSET_BASIS;
-
-            byte* ptr = (byte*)value;
-            for (int i = 0; i < size; i++)
-            {
-                hash ^= ptr[i];
-                hash *= FNV_PRIME;
-            }
-
-            return (long)hash;
-        }
-
         public static long Combine(long idA, long idB)
         {
             ulong hash = (ulong)idA;

@@ -325,8 +325,8 @@ Called automatically on `Application.quitting`.
 ┌─────────────────────────────────────────┐
 │ Language Editor                         │
 ├─────────────────────────────────────────┤
-│ [Languages] [Keys] [Components] [Tools] │ ← Tab Navigation
-│ [Debug] [Settings]                      │
+│ [Localization] [Keys] [Components]      │ ← Tab Navigation
+│ [Tools] [Debug] [Settings]              │
 ├─────────────────────────────────────────┤
 │                                         │
 │  Left Panel        │  Right Panel       │
@@ -343,7 +343,7 @@ Called automatically on `Application.quitting`.
 
 - **Virtual Tables:** Keys can be organized into tables using dot notation (e.g. `UI.MainMenu.Start`). The editor allows filtering, editing, and exporting/importing specific tables in JSON format seamlessly.
 - **Inline Initialization:** Creating a new key allows for immediate assignment of the default language value, streamlining the data entry process for both string and array keys.
-- **Font System:** The Languages tab includes a Fonts sub-tab for assigning primary and language-specific fallback fonts (supporting both TextMeshPro and Legacy fonts). The `LocalizationManager` automatically handles switching fonts on all components via the `OnFontChanged` event when the language changes.
+- **Font System:** The Localization tab includes a Fonts sub-tab for assigning primary and language-specific fallback fonts (supporting both TextMeshPro and Legacy fonts). The `LocalizationManager` automatically handles switching fonts on all components via the `OnFontChanged` event when the language changes.
 
 ### Build Processor
 

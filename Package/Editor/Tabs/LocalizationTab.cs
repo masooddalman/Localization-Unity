@@ -13,29 +13,29 @@ namespace PicoShot.Localization.Editor.Tabs
     /// <summary>
     /// Tab for managing available languages and language-specific fonts.
     /// </summary>
-    public sealed class LanguagesTab : LocalizationEditorTabBase
+    public sealed class LocalizationTab : LocalizationEditorTabBase
     {
-        private enum LanguagesSubTab
+        private enum LocalizationSubTab
         {
             Languages,
             Fonts
         }
 
         private static readonly string[] SubTabNames = { "Languages", "Fonts" };
-        private LanguagesSubTab _activeSubTab = LanguagesSubTab.Languages;
+        private LocalizationSubTab _activeSubTab = LocalizationSubTab.Languages;
 
         private Vector2 _scrollPos;
         private Vector2 _fontsScrollPos;
 
-        public LanguagesTab(LocalizationEditor editor, LanguageEditorData data) : base(editor, data) { }
+        public LocalizationTab(LocalizationEditor editor, LanguageEditorData data) : base(editor, data) { }
 
-        public override string TabName => "Languages";
+        public override string TabName => "Localization";
 
         public override void Draw()
         {
             EditorGUILayout.BeginVertical(GUILayout.ExpandHeight(true));
             {
-                DrawSectionHeader("Languages");
+                DrawSectionHeader("Localization");
                 DrawSubTabToolbar();
 
                 EditorGUILayout.Space(5);
@@ -44,10 +44,10 @@ namespace PicoShot.Localization.Editor.Tabs
                 {
                     switch (_activeSubTab)
                     {
-                        case LanguagesSubTab.Languages:
+                        case LocalizationSubTab.Languages:
                             DrawLanguagesSubTab();
                             break;
-                        case LanguagesSubTab.Fonts:
+                        case LocalizationSubTab.Fonts:
                             DrawFontsSubTab();
                             break;
                     }
@@ -61,11 +61,11 @@ namespace PicoShot.Localization.Editor.Tabs
             EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
             for (int i = 0; i < SubTabNames.Length; i++)
             {
-                bool isActive = _activeSubTab == (LanguagesSubTab)i;
+                bool isActive = _activeSubTab == (LocalizationSubTab)i;
                 GUI.backgroundColor = isActive ? new Color(0.7f, 0.7f, 0.7f) : Color.white;
                 if (GUILayout.Button(SubTabNames[i], EditorStyles.toolbarButton))
                 {
-                    _activeSubTab = (LanguagesSubTab)i;
+                    _activeSubTab = (LocalizationSubTab)i;
                     GUI.FocusControl(null);
                 }
                 GUI.backgroundColor = Color.white;

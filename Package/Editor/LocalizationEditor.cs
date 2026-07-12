@@ -24,11 +24,11 @@ namespace PicoShot.Localization
 
         // Tabs
         private Dictionary<EditorTab, ILocalizationEditorTab> _tabs;
-        private EditorTab _currentTab = EditorTab.Languages;
+        private EditorTab _currentTab = EditorTab.Localization;
 
         private enum EditorTab
         {
-            Languages,
+            Localization,
             Keys,
             Components,
             Tools,
@@ -166,7 +166,7 @@ namespace PicoShot.Localization
         {
             _tabs = new Dictionary<EditorTab, ILocalizationEditorTab>
             {
-                { EditorTab.Languages, new LanguagesTab(this, _data) },
+                { EditorTab.Localization, new LocalizationTab(this, _data) },
                 { EditorTab.Keys, new KeysTab(this, _data) },
                 { EditorTab.Components, new ComponentsTab(this, _data) },
                 { EditorTab.Tools, new ToolsTab(this, _data) },
@@ -199,7 +199,7 @@ namespace PicoShot.Localization
         {
             return tab switch
             {
-                EditorTab.Languages => "Languages",
+                EditorTab.Localization => "Localization",
                 EditorTab.Keys => "Keys",
                 EditorTab.Components => "Components",
                 EditorTab.Tools => "Tools",

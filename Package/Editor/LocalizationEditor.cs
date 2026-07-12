@@ -32,7 +32,6 @@ namespace PicoShot.Localization
             Keys,
             Components,
             Tools,
-            Debug,
             Config
         }
 
@@ -170,7 +169,6 @@ namespace PicoShot.Localization
                 { EditorTab.Keys, new KeysTab(this, _data) },
                 { EditorTab.Components, new ComponentsTab(this, _data) },
                 { EditorTab.Tools, new ToolsTab(this, _data) },
-                { EditorTab.Debug, new DebugTab(this, _data) },
                 { EditorTab.Config, new ConfigTab(this, _data) }
             };
         }
@@ -203,7 +201,6 @@ namespace PicoShot.Localization
                 EditorTab.Keys => "Keys",
                 EditorTab.Components => "Components",
                 EditorTab.Tools => "Tools",
-                EditorTab.Debug => "Debug",
                 EditorTab.Config => "Settings",
                 _ => tab.ToString()
             };

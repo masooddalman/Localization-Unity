@@ -326,7 +326,7 @@ Called automatically on `Application.quitting`.
 │ Language Editor                         │
 ├─────────────────────────────────────────┤
 │ [Localization] [Keys] [Components]      │ ← Tab Navigation
-│ [Tools] [Debug] [Settings]              │
+│ [Tools] [Settings]                      │
 ├─────────────────────────────────────────┤
 │                                         │
 │  Left Panel        │  Right Panel       │

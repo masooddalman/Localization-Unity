@@ -156,6 +156,7 @@ namespace PicoShot.Localization.Editor.Tabs
             var systemLangCode = LanguageDefinitions.FromSystemLanguage(Application.systemLanguage);
 
             EditorGUILayout.LabelField("Language", EditorStyles.boldLabel);
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.LabelField("Current:", GUILayout.Width(55));
@@ -175,6 +176,7 @@ namespace PicoShot.Localization.Editor.Tabs
             }
             EditorGUILayout.EndHorizontal();
 
+            EditorGUILayout.EndVertical();
             EditorGUILayout.Space(10);
         }
 
@@ -200,6 +202,7 @@ namespace PicoShot.Localization.Editor.Tabs
         private void DrawDebugStatus()
         {
             EditorGUILayout.LabelField("Status", EditorStyles.boldLabel);
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
             DrawStatusField("Initialized", LocalizationManager.IsInitialized.ToString());
             DrawStatusField("Current", LocalizationManager.CurrentLanguage);
@@ -207,12 +210,14 @@ namespace PicoShot.Localization.Editor.Tabs
             DrawStatusField("RTL", LocalizationManager.IsRightToLeft.ToString());
             DrawStatusField("Available", LocalizationManager.GetAvailableLanguages().Count().ToString());
 
+            EditorGUILayout.EndVertical();
             EditorGUILayout.Space(10);
         }
 
         private void DrawDebugTesting()
         {
             EditorGUILayout.LabelField("Testing", EditorStyles.boldLabel);
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
             DrawDebugTestRow("Lookup Key", Data.TestKey, (v) => Data.TestKey = v, () =>
             {
@@ -245,6 +250,8 @@ namespace PicoShot.Localization.Editor.Tabs
             {
                 DrawDebugResult();
             }
+
+            EditorGUILayout.EndVertical();
         }
 
         private void DrawDebugTestRow(string label, string value, System.Action<string> onValueChanged, System.Action onTest)
@@ -294,6 +301,8 @@ namespace PicoShot.Localization.Editor.Tabs
         private void DrawDebugResult()
         {
             EditorGUILayout.Space(8);
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
             EditorGUILayout.LabelField("Result", EditorStyles.boldLabel);
             EditorGUILayout.SelectableLabel(Data.TestResult, EditorStyles.wordWrappedLabel, GUILayout.Height(50));
 
@@ -309,6 +318,8 @@ namespace PicoShot.Localization.Editor.Tabs
                 Data.TestResult = "";
             }
             EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.EndVertical();
         }
 
         private static void DrawStatusField(string label, string value)

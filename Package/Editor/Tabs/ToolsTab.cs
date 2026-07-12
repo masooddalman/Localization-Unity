@@ -143,47 +143,42 @@ namespace PicoShot.Localization.Editor.Tabs
         {
             Data.MainScrollPosition = EditorGUILayout.BeginScrollView(Data.MainScrollPosition, GUILayout.ExpandHeight(true));
 
-            EditorGUILayout.LabelField("Language Manager Debug", EditorStyles.largeLabel);
-            EditorGUILayout.Space(5);
-
-            DrawLanguageSwitcher();
-            DrawSystemStatus();
-            DrawTestingTools();
+            DrawDebugHeaderBar();
+            DrawDebugStatusCard();
+            DrawDebugTestingCard();
 
             EditorGUILayout.EndScrollView();
         }
 
-        private void DrawLanguageSwitcher()
+        private void DrawDebugHeaderBar()
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            EditorGUILayout.LabelField("Language Selection", EditorStyles.boldLabel);
-
             EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("Current Language:", GUILayout.Width(120));
+
+            EditorGUILayout.LabelField("Current Language:", GUILayout.Width(110));
 
             var currentLang = LocalizationManager.CurrentLanguage;
             var content = new GUIContent(LanguageDefinitions.GetDisplayName(currentLang ?? string.Empty));
-            var dropdownRect = EditorGUILayout.GetControlRect(GUILayout.ExpandWidth(true));
+            var dropdownRect = EditorGUILayout.GetControlRect(GUILayout.ExpandWidth(true), GUILayout.MinWidth(120));
 
             if (EditorGUI.DropdownButton(dropdownRect, content, FocusType.Keyboard))
             {
                 ShowLanguageDropdown(dropdownRect, currentLang);
             }
 
-            EditorGUILayout.EndHorizontal();
+            GUILayout.FlexibleSpace();
 
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("System Language:", GUILayout.Width(120));
             var systemLangCode = LanguageDefinitions.FromSystemLanguage(Application.systemLanguage);
-            EditorGUILayout.LabelField(LanguageDefinitions.GetDisplayName(systemLangCode ?? string.Empty));
+            EditorGUILayout.LabelField("System:", GUILayout.Width(50));
+            EditorGUILayout.LabelField(LanguageDefinitions.GetDisplayName(systemLangCode ?? string.Empty), EditorStyles.boldLabel, GUILayout.Width(100));
 
-            if (GUILayout.Button("Use System Language", GUILayout.Width(150)))
+            if (GUILayout.Button("Use System", GUILayout.Width(90)))
             {
                 LocalizationManager.SetLanguage(LocalizationManager.DetectSystemLanguage());
                 Editor.Repaint();
             }
-            EditorGUILayout.EndHorizontal();
 
+            EditorGUILayout.EndHorizontal();
             EditorGUILayout.EndVertical();
         }
 
@@ -206,126 +201,153 @@ namespace PicoShot.Localization.Editor.Tabs
             menu.DropDown(dropdownRect);
         }
 
-        private void DrawSystemStatus()
+        private void DrawDebugStatusCard()
         {
-            Data.ShowStatusSection = EditorGUILayout.Foldout(Data.ShowStatusSection, "System Status", true);
-            if (!Data.ShowStatusSection) return;
+            EditorGUILayout.Space(8);
+            EditorGUILayout.LabelField("System Status", EditorStyles.boldLabel);
+
+            var statusItems = new (string label, string value)[]
+            {
+                ("Initialized", LocalizationManager.IsInitialized.ToString()),
+                ("Current Language", LocalizationManager.CurrentLanguage),
+                ("Default Language", LocalizationManager.DefaultLanguage),
+                ("Is RTL", LocalizationManager.IsRightToLeft.ToString()),
+                ("Available Languages", LocalizationManager.GetAvailableLanguages().Count().ToString())
+            };
+
+            int columns = GetDebugColumnCount();
+            float columnWidth = Mathf.Max(140f, (WindowPosition.width - 60f) / columns);
 
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             EditorGUILayout.BeginHorizontal();
 
-            EditorGUILayout.BeginVertical(GUILayout.Width(WindowPosition.width / 2 - 10));
-            DrawStatusField("Initialized", LocalizationManager.IsInitialized.ToString(), MessageType.Info);
-            DrawStatusField("Current Language", LocalizationManager.CurrentLanguage, MessageType.Info);
-            DrawStatusField("Default Language", LocalizationManager.DefaultLanguage, MessageType.Info);
-            DrawStatusField("Is RTL Language", LocalizationManager.IsRightToLeft.ToString(), MessageType.Info);
-            EditorGUILayout.EndVertical();
+            int columnIndex = 0;
+            for (int i = 0; i < statusItems.Length; i++)
+            {
+                if (columnIndex > 0 && columnIndex % columns == 0)
+                {
+                    EditorGUILayout.EndHorizontal();
+                    EditorGUILayout.BeginHorizontal();
+                }
 
-            EditorGUILayout.BeginVertical();
-            var availableCount = LocalizationManager.GetAvailableLanguages().Count();
-            DrawStatusField("Available Languages", availableCount.ToString(), MessageType.Info);
-            EditorGUILayout.EndVertical();
+                EditorGUILayout.BeginHorizontal(GUILayout.Width(columnWidth));
+                DrawStatusField(statusItems[i].label, statusItems[i].value);
+                EditorGUILayout.EndHorizontal();
+
+                columnIndex++;
+            }
 
             EditorGUILayout.EndHorizontal();
             EditorGUILayout.EndVertical();
         }
 
-        private void DrawTestingTools()
+        private int GetDebugColumnCount()
         {
-            Data.ShowTestingTools = EditorGUILayout.Foldout(Data.ShowTestingTools, "Testing Tools", true);
-            if (!Data.ShowTestingTools) return;
+            float width = EditorGUIUtility.currentViewWidth;
+            if (width >= 500f) return 3;
+            if (width >= 350f) return 2;
+            return 1;
+        }
+
+        private void DrawDebugTestingCard()
+        {
+            EditorGUILayout.Space(8);
+            EditorGUILayout.LabelField("Testing Tools", EditorStyles.boldLabel);
 
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
-            DrawTestSection("Simple Text Lookup", () =>
+            DrawTestRow("Simple Lookup", Data.TestKey, (value) => Data.TestKey = value, () =>
             {
-                EditorGUILayout.BeginHorizontal();
-                Data.TestKey = EditorGUILayout.TextField(new GUIContent("Key", "Enter the language key to test"), Data.TestKey);
-                GUI.enabled = !string.IsNullOrEmpty(Data.TestKey);
-                if (GUILayout.Button("Test", GUILayout.Width(60)))
-                {
-                    Data.TestResult = LocalizationManager.GetText(Data.TestKey);
-                    GUI.FocusControl(null);
-                }
-                GUI.enabled = true;
-                EditorGUILayout.EndHorizontal();
+                Data.TestResult = LocalizationManager.GetText(Data.TestKey);
             });
 
-            EditorGUILayout.Space(5);
+            EditorGUILayout.Space(8);
 
-            DrawTestSection("RTL Test", () =>
+            DrawTestRow("RTL Fix", Data.TestRtl, (value) => Data.TestRtl = value, () =>
             {
-                EditorGUILayout.BeginHorizontal();
-                Data.TestRtl = EditorGUILayout.TextField(new GUIContent("Text", "Enter Arabic text to test RTL"), Data.TestRtl);
-                GUI.enabled = !string.IsNullOrEmpty(Data.TestRtl);
-                if (GUILayout.Button("Test", GUILayout.Width(60)))
-                {
-                    Data.TestResult = RtlTextHandler.Fix(Data.TestRtl);
-                    GUI.FocusControl(null);
-                }
-                GUI.enabled = true;
-                EditorGUILayout.EndHorizontal();
+                Data.TestResult = RtlTextHandler.Fix(Data.TestRtl);
             });
 
-            EditorGUILayout.Space(5);
+            EditorGUILayout.Space(8);
 
-            DrawTestSection("Parameterized Text", () =>
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField("Parameterized", GUILayout.Width(90));
+            Data.TestKeyWithParams = EditorGUILayout.TextField(Data.TestKeyWithParams);
+            EditorGUILayout.EndHorizontal();
+
+            DrawParameterList();
+
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+            GUI.enabled = !string.IsNullOrEmpty(Data.TestKeyWithParams);
+            if (GUILayout.Button("Test with Parameters", GUILayout.Width(150), GUILayout.Height(24)))
             {
-                Data.TestKeyWithParams = EditorGUILayout.TextField(
-                    new GUIContent("Key", "Enter the language key with parameters"),
-                    Data.TestKeyWithParams);
-
-                DrawParameterList();
-
-                GUI.enabled = !string.IsNullOrEmpty(Data.TestKeyWithParams);
-                if (GUILayout.Button("Test With Parameters", GUILayout.Height(24)))
-                {
-                    Data.TestResult = LocalizationManager.GetText(Data.TestKeyWithParams, Data.ParameterList.ToArray());
-                    GUI.FocusControl(null);
-                }
-                GUI.enabled = true;
-            });
+                Data.TestResult = LocalizationManager.GetText(Data.TestKeyWithParams, Data.ParameterList.ToArray());
+                GUI.FocusControl(null);
+            }
+            GUI.enabled = true;
+            EditorGUILayout.EndHorizontal();
 
             if (!string.IsNullOrEmpty(Data.TestResult))
             {
-                DrawTestResult();
+                DrawDebugResultCard();
             }
 
             EditorGUILayout.EndVertical();
         }
 
+        private void DrawTestRow(string label, string value, System.Action<string> onValueChanged, System.Action onTest)
+        {
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField(new GUIContent(label, $"Enter the value to test {label.ToLower()}"), GUILayout.Width(90));
+            var newValue = EditorGUILayout.TextField(value);
+            if (newValue != value)
+            {
+                onValueChanged?.Invoke(newValue);
+            }
+
+            GUI.enabled = !string.IsNullOrEmpty(value);
+            if (GUILayout.Button("Test", GUILayout.Width(60)))
+            {
+                onTest?.Invoke();
+                GUI.FocusControl(null);
+            }
+            GUI.enabled = true;
+            EditorGUILayout.EndHorizontal();
+        }
+
         private void DrawParameterList()
         {
-            Data.ShowParameterList = EditorGUILayout.Foldout(Data.ShowParameterList, "Parameters", true);
-            if (Data.ShowParameterList)
-            {
-                EditorGUI.indentLevel++;
-                for (var i = 0; i < Data.ParameterList.Count; i++)
-                {
-                    EditorGUILayout.BeginHorizontal();
-                    Data.ParameterList[i] = EditorGUILayout.TextField($"Param {i}", Data.ParameterList[i]);
-                    if (GUILayout.Button("-", GUILayout.Width(20)))
-                    {
-                        Data.ParameterList.RemoveAt(i);
-                        break;
-                    }
-                    EditorGUILayout.EndHorizontal();
-                }
-                EditorGUI.indentLevel--;
+            EditorGUILayout.Space(4);
+            Data.ShowParameterList = EditorGUILayout.Foldout(Data.ShowParameterList, $"Parameters ({Data.ParameterList.Count})", true);
+            if (!Data.ShowParameterList) return;
 
-                if (GUILayout.Button("Add Parameter"))
+            EditorGUI.indentLevel++;
+            for (var i = 0; i < Data.ParameterList.Count; i++)
+            {
+                EditorGUILayout.BeginHorizontal();
+                Data.ParameterList[i] = EditorGUILayout.TextField($"Param {i}", Data.ParameterList[i]);
+                if (GUILayout.Button("-", GUILayout.Width(24)))
                 {
-                    Data.ParameterList.Add("");
+                    Data.ParameterList.RemoveAt(i);
+                    break;
                 }
+                EditorGUILayout.EndHorizontal();
+            }
+            EditorGUI.indentLevel--;
+
+            if (GUILayout.Button("Add Parameter", GUILayout.Width(120)))
+            {
+                Data.ParameterList.Add("");
             }
         }
 
-        private void DrawTestResult()
+        private void DrawDebugResultCard()
         {
-            EditorGUILayout.Space(5);
-            EditorGUILayout.LabelField("Result:", EditorStyles.boldLabel);
+            EditorGUILayout.Space(10);
+            EditorGUILayout.LabelField("Result", EditorStyles.boldLabel);
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            EditorGUILayout.SelectableLabel(Data.TestResult, EditorStyles.wordWrappedLabel, GUILayout.Height(40));
+            EditorGUILayout.SelectableLabel(Data.TestResult, EditorStyles.wordWrappedLabel, GUILayout.Height(50));
 
             EditorGUILayout.BeginHorizontal();
             GUILayout.FlexibleSpace();
@@ -344,30 +366,15 @@ namespace PicoShot.Localization.Editor.Tabs
             EditorGUILayout.EndVertical();
         }
 
-        private static void DrawStatusField(string label, string value, MessageType type = MessageType.None)
+        private static void DrawStatusField(string label, string value)
         {
             EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField(label + ":", GUILayout.Width(120));
+            EditorGUILayout.LabelField(label + ":", EditorStyles.miniLabel, GUILayout.Width(95));
 
-            GUI.color = type switch
-            {
-                MessageType.Info => Color.cyan,
-                MessageType.Warning => Color.yellow,
-                MessageType.Error => Color.red,
-                _ => GUI.color
-            };
-
-            EditorGUILayout.LabelField(value, EditorStyles.boldLabel);
+            GUI.color = Color.cyan;
+            EditorGUILayout.LabelField(value ?? "-", EditorStyles.boldLabel);
             GUI.color = Color.white;
             EditorGUILayout.EndHorizontal();
-        }
-
-        private static void DrawTestSection(string sectionTitle, System.Action content)
-        {
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            EditorGUILayout.LabelField(sectionTitle, EditorStyles.boldLabel);
-            content?.Invoke();
-            EditorGUILayout.EndVertical();
         }
 
         #endregion

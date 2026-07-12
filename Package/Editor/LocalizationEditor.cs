@@ -31,7 +31,6 @@ namespace PicoShot.Localization
             Languages,
             Keys,
             Components,
-            Fonts,
             Tools,
             Debug,
             Config
@@ -170,7 +169,6 @@ namespace PicoShot.Localization
                 { EditorTab.Languages, new LanguagesTab(this, _data) },
                 { EditorTab.Keys, new KeysTab(this, _data) },
                 { EditorTab.Components, new ComponentsTab(this, _data) },
-                { EditorTab.Fonts, new FontsTab(this, _data) },
                 { EditorTab.Tools, new ToolsTab(this, _data) },
                 { EditorTab.Debug, new DebugTab(this, _data) },
                 { EditorTab.Config, new ConfigTab(this, _data) }
@@ -204,7 +202,6 @@ namespace PicoShot.Localization
                 EditorTab.Languages => "Languages",
                 EditorTab.Keys => "Keys",
                 EditorTab.Components => "Components",
-                EditorTab.Fonts => "Fonts",
                 EditorTab.Tools => "Tools",
                 EditorTab.Debug => "Debug",
                 EditorTab.Config => "Settings",

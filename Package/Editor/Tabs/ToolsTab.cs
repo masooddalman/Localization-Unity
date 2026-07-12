@@ -278,6 +278,8 @@ namespace PicoShot.Localization.Editor.Tabs
             Data.ShowParameterList = EditorGUILayout.Foldout(Data.ShowParameterList, $"Parameters ({Data.ParameterList.Count})", true);
             if (!Data.ShowParameterList) return;
 
+            int removeIndex = -1;
+
             EditorGUI.indentLevel++;
             for (var i = 0; i < Data.ParameterList.Count; i++)
             {
@@ -285,12 +287,16 @@ namespace PicoShot.Localization.Editor.Tabs
                 Data.ParameterList[i] = EditorGUILayout.TextField($"Param {i}", Data.ParameterList[i]);
                 if (GUILayout.Button("-", GUILayout.Width(24)))
                 {
-                    Data.ParameterList.RemoveAt(i);
-                    break;
+                    removeIndex = i;
                 }
                 EditorGUILayout.EndHorizontal();
             }
             EditorGUI.indentLevel--;
+
+            if (removeIndex >= 0)
+            {
+                Data.ParameterList.RemoveAt(removeIndex);
+            }
 
             if (GUILayout.Button("Add Parameter", GUILayout.Width(110)))
             {

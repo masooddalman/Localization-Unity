@@ -17,6 +17,16 @@ namespace PicoShot.Localization.Editor.Tabs
     {
         private readonly JsonService _jsonService;
 
+        private enum ConfigSubTab
+        {
+            General,
+            Translation,
+            Data
+        }
+
+        private static readonly string[] SubTabNames = { "General", "Translation", "Data" };
+        private ConfigSubTab _activeSubTab = ConfigSubTab.General;
+
         public ConfigTab(LocalizationEditor editor, LanguageEditorData data) : base(editor, data)
         {
             _jsonService = new JsonService(data);
@@ -26,19 +36,67 @@ namespace PicoShot.Localization.Editor.Tabs
 
         public override void Draw()
         {
-            DrawSectionHeader("Configuration");
-
             var config = LocalizationConfigProvider.Config;
 
-            using (BeginBox())
+            EditorGUILayout.BeginVertical(GUILayout.ExpandHeight(true));
             {
-                DrawDefaultLanguageSection(config);
-                DrawCompressionSettings(config);
-                DrawProtectionSettings(config);
-                DrawTranslationSettings();
-                DrawFileOperations();
-                DrawPathInfo();
+                DrawSectionHeader("Settings");
+                DrawSubTabToolbar();
+
+                EditorGUILayout.Space(5);
+
+                using (BeginBox())
+                {
+                    switch (_activeSubTab)
+                    {
+                        case ConfigSubTab.General:
+                            DrawGeneralTab(config);
+                            break;
+                        case ConfigSubTab.Translation:
+                            DrawTranslationTab();
+                            break;
+                        case ConfigSubTab.Data:
+                            DrawDataTab(config);
+                            break;
+                    }
+                }
             }
+            EditorGUILayout.EndVertical();
+        }
+
+        private void DrawSubTabToolbar()
+        {
+            EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
+            for (int i = 0; i < SubTabNames.Length; i++)
+            {
+                bool isActive = _activeSubTab == (ConfigSubTab)i;
+                GUI.backgroundColor = isActive ? new Color(0.7f, 0.7f, 0.7f) : Color.white;
+                if (GUILayout.Button(SubTabNames[i], EditorStyles.toolbarButton))
+                {
+                    _activeSubTab = (ConfigSubTab)i;
+                    GUI.FocusControl(null);
+                }
+                GUI.backgroundColor = Color.white;
+            }
+            EditorGUILayout.EndHorizontal();
+        }
+
+        private void DrawGeneralTab(LocalizationConfig config)
+        {
+            DrawDefaultLanguageSection(config);
+            DrawCompressionSettings(config);
+            DrawProtectionSettings(config);
+        }
+
+        private void DrawTranslationTab()
+        {
+            DrawTranslationSettings();
+        }
+
+        private void DrawDataTab(LocalizationConfig config)
+        {
+            DrawFileOperations();
+            DrawPathInfo();
         }
 
         private void DrawDefaultLanguageSection(LocalizationConfig config)

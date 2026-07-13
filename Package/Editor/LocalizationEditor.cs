@@ -507,7 +507,6 @@ namespace PicoShot.Localization
 
                 _data.HasUnsavedChanges = false;
                 ShowNotification(new GUIContent("Language data saved successfully!"));
-                Debug.Log("[LocalizationEditor] Language data saved.");
 
                 if (LocalizationManager.IsInitialized)
                 {

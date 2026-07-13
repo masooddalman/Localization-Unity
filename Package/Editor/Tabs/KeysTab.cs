@@ -580,7 +580,7 @@ namespace PicoShot.Localization.Editor.Tabs
             }
             else
             {
-                Debug.LogWarning($"Key '{fullKey}' already exists.");
+                Editor.ShowNotification(new GUIContent($"Key '{fullKey}' already exists."));
             }
         }
 
@@ -594,14 +594,14 @@ namespace PicoShot.Localization.Editor.Tabs
             {
                 if (string.IsNullOrEmpty(newLocalKey))
                 {
-                    EditorUtility.DisplayDialog("Error", "Key name cannot be empty.", "OK");
+                    Editor.ShowNotification(new GUIContent("Key name cannot be empty."));
                     return;
                 }
 
                 newLocalKey = LocalizationTextEditorPopup.FilterKeyName(newLocalKey);
                 if (string.IsNullOrEmpty(newLocalKey))
                 {
-                    EditorUtility.DisplayDialog("Error", "Key name cannot be empty.", "OK");
+                    Editor.ShowNotification(new GUIContent("Key name cannot be empty."));
                     return;
                 }
 

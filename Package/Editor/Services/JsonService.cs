@@ -211,7 +211,6 @@ namespace PicoShot.Localization.Editor.Services
 
                 EditorUtility.DisplayDialog("Export Successful",
                     $"Exported {_data.Keys.Count} keys across {_data.LanguageCodes.Count} languages to:\n{path}", "OK");
-                Debug.Log($"[LocalizationEditor] Exported to JSON: {path}");
             }
             catch (Exception ex)
             {
@@ -227,7 +226,7 @@ namespace PicoShot.Localization.Editor.Services
         {
             if (string.IsNullOrEmpty(view)) return;
             string prefix = view + _data.CurrentViewDelimiter;
-            
+
             string path = EditorUtility.SaveFilePanel(
                 $"Export View '{view}' to JSON",
                 "",
@@ -235,9 +234,9 @@ namespace PicoShot.Localization.Editor.Services
                 "json");
 
             if (string.IsNullOrEmpty(path)) return;
-            
+
             var viewKeys = _data.Keys.Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList();
-            
+
             try
             {
                 var sb = new StringBuilder();
@@ -403,7 +402,6 @@ namespace PicoShot.Localization.Editor.Services
                     Debug.LogWarning($"[LocalizationEditor] Import skipped {skippedLangs} unsupported language entries.");
                 }
                 EditorUtility.DisplayDialog("Import Successful", message, "OK");
-                Debug.Log($"[LocalizationEditor] Imported from JSON: {path}");
             }
             catch (Exception ex)
             {
@@ -486,7 +484,7 @@ namespace PicoShot.Localization.Editor.Services
                 _data.LanguageCodes.Sort();
                 _data.HasUnsavedChanges = true;
 
-                EditorUtility.DisplayDialog("Import Successful", 
+                EditorUtility.DisplayDialog("Import Successful",
                     $"Imported {importedKeys} new keys and {importedLangs} new languages into view '{view}'.", "OK");
                 Debug.Log($"[LocalizationEditor] Imported JSON into view '{view}': {path}");
             }

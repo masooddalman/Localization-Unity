@@ -221,31 +221,31 @@ namespace PicoShot.Localization.Editor.Services
         }
 
         /// <summary>
-        /// Exports a specific table to a JSON file.
+        /// Exports a specific view to a JSON file.
         /// </summary>
-        public void ExportTableToJson(string table)
+        public void ExportViewToJson(string view)
         {
-            if (string.IsNullOrEmpty(table)) return;
-            string prefix = table + ".";
+            if (string.IsNullOrEmpty(view)) return;
+            string prefix = view + _data.CurrentViewDelimiter;
             
             string path = EditorUtility.SaveFilePanel(
-                $"Export Table '{table}' to JSON",
+                $"Export View '{view}' to JSON",
                 "",
-                $"Table_{table}_{DateTime.Now:yyyyMMdd_HHmmss}.json",
+                $"View_{view}_{DateTime.Now:yyyyMMdd_HHmmss}.json",
                 "json");
 
             if (string.IsNullOrEmpty(path)) return;
             
-            var tableKeys = _data.Keys.Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList();
+            var viewKeys = _data.Keys.Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList();
             
             try
             {
                 var sb = new StringBuilder();
                 sb.AppendLine("{");
 
-                for (int i = 0; i < tableKeys.Count; i++)
+                for (int i = 0; i < viewKeys.Count; i++)
                 {
-                    string fullKey = tableKeys[i];
+                    string fullKey = viewKeys[i];
                     string localKey = _data.GetLocalKeyName(fullKey);
                     sb.Append($"  \"{EscapeJsonString(localKey)}\": {{\n");
 
@@ -280,7 +280,7 @@ namespace PicoShot.Localization.Editor.Services
                     }
 
                     sb.Append("  }");
-                    if (i < tableKeys.Count - 1) sb.Append(",");
+                    if (i < viewKeys.Count - 1) sb.Append(",");
                     sb.Append("\n");
                 }
 
@@ -288,13 +288,13 @@ namespace PicoShot.Localization.Editor.Services
                 File.WriteAllText(path, sb.ToString());
 
                 EditorUtility.DisplayDialog("Export Successful",
-                    $"Exported {tableKeys.Count} keys from table '{table}' to:\n{path}", "OK");
-                Debug.Log($"[LocalizationEditor] Exported table to JSON: {path}");
+                    $"Exported {viewKeys.Count} keys from view '{view}' to:\n{path}", "OK");
+                Debug.Log($"[LocalizationEditor] Exported view to JSON: {path}");
             }
             catch (Exception ex)
             {
-                EditorUtility.DisplayDialog("Export Failed", $"Failed to export table: {ex.Message}", "OK");
-                Debug.LogError($"[LocalizationEditor] JSON table export failed: {ex}");
+                EditorUtility.DisplayDialog("Export Failed", $"Failed to export view: {ex.Message}", "OK");
+                Debug.LogError($"[LocalizationEditor] JSON view export failed: {ex}");
             }
         }
 
@@ -413,15 +413,15 @@ namespace PicoShot.Localization.Editor.Services
         }
 
         /// <summary>
-        /// Imports localization data into a specific table from a JSON file.
+        /// Imports localization data into a specific view from a JSON file.
         /// </summary>
-        public void ImportTableFromJson(string table)
+        public void ImportViewFromJson(string view)
         {
-            if (string.IsNullOrEmpty(table)) return;
-            string prefix = table + ".";
+            if (string.IsNullOrEmpty(view)) return;
+            string prefix = view + _data.CurrentViewDelimiter;
 
             string path = EditorUtility.OpenFilePanel(
-                $"Import JSON into Table '{table}'",
+                $"Import JSON into View '{view}'",
                 "",
                 "json");
 
@@ -487,13 +487,13 @@ namespace PicoShot.Localization.Editor.Services
                 _data.HasUnsavedChanges = true;
 
                 EditorUtility.DisplayDialog("Import Successful", 
-                    $"Imported {importedKeys} new keys and {importedLangs} new languages into table '{table}'.", "OK");
-                Debug.Log($"[LocalizationEditor] Imported JSON into table '{table}': {path}");
+                    $"Imported {importedKeys} new keys and {importedLangs} new languages into view '{view}'.", "OK");
+                Debug.Log($"[LocalizationEditor] Imported JSON into view '{view}': {path}");
             }
             catch (Exception ex)
             {
-                EditorUtility.DisplayDialog("Import Failed", $"Failed to import table data: {ex.Message}", "OK");
-                Debug.LogError($"[LocalizationEditor] JSON table import failed: {ex}");
+                EditorUtility.DisplayDialog("Import Failed", $"Failed to import view data: {ex.Message}", "OK");
+                Debug.LogError($"[LocalizationEditor] JSON view import failed: {ex}");
             }
         }
 

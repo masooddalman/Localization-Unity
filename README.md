@@ -21,8 +21,8 @@ A lightweight, zero-runtime-dependency, high-performance localization system for
 - **Format Parameters** - String formatting support with `{0}`, `{1}` placeholders
 - **Mixed LTR/RTL Support** - Smart token-based bi-directional text processing for seamless Arabic/Persian integration in English contexts and vice versa
 - **Language-Specific Fonts** - Automatic fallback and language-specific font switching for all localized text components
-- **Virtual Tables** - Organize translation keys into grouped tables via dot-notation with dedicated export/import
-- **Smart Component Inspector** - Searchable dropdown menus for selecting tables and keys directly in the Unity Inspector
+- **Key Views** - Organize translation keys by dot or legacy underscore delimiters, with dedicated view export/import
+- **Smart Component Inspector** - Searchable dropdown menus for selecting views and keys directly in the Unity Inspector
 - **Inline Key Initialization** - Set default language values immediately when creating new keys in the Editor
 
 ## Localization App

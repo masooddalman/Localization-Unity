@@ -40,7 +40,7 @@ namespace PicoShot.Localization.Editor.Tabs
 
             using (BeginBox())
             {
-                DrawTableSelectionSection();
+                DrawViewSelectionSection();
                 DrawAddKeySection();
                 DrawSearchAndFilterSection();
             }
@@ -59,44 +59,44 @@ namespace PicoShot.Localization.Editor.Tabs
             EditorGUILayout.EndVertical();
         }
 
-        private void DrawTableSelectionSection()
+        private void DrawViewSelectionSection()
         {
             EditorGUILayout.BeginVertical("box");
             EditorGUILayout.LabelField("Views", EditorStyles.boldLabel);
 
             EditorGUILayout.BeginHorizontal();
-            var tables = new List<string> { "All Keys" };
-            tables.AddRange(Data.GetTables());
+            var views = new List<string> { "All Keys" };
+            views.AddRange(Data.GetViews());
 
-            if (!string.IsNullOrEmpty(Data.SelectedTable) && !tables.Any(t => t.Equals(Data.SelectedTable, StringComparison.OrdinalIgnoreCase)))
+            if (!string.IsNullOrEmpty(Data.SelectedView) && !views.Any(v => v.Equals(Data.SelectedView, StringComparison.OrdinalIgnoreCase)))
             {
-                tables.Add(Data.SelectedTable);
+                views.Add(Data.SelectedView);
             }
 
-            int currentIndex = string.IsNullOrEmpty(Data.SelectedTable) ? 0 : tables.FindIndex(t => t.Equals(Data.SelectedTable, StringComparison.OrdinalIgnoreCase));
+            int currentIndex = string.IsNullOrEmpty(Data.SelectedView) ? 0 : views.FindIndex(v => v.Equals(Data.SelectedView, StringComparison.OrdinalIgnoreCase));
             if (currentIndex < 0) currentIndex = 0;
 
-            string[] displayNames = tables.Select(t => t == "All Keys" ? t : t.ToUpperInvariant()).ToArray();
+            string[] displayNames = views.Select(v => v == "All Keys" ? v : v.ToUpperInvariant()).ToArray();
 
             int newIndex = EditorGUILayout.Popup(currentIndex, displayNames);
             if (newIndex != currentIndex)
             {
-                Data.SelectedTable = newIndex == 0 ? "" : tables[newIndex];
+                Data.SelectedView = newIndex == 0 ? "" : views[newIndex];
                 Data.SelectedKey = null;
                 GUI.FocusControl(null);
             }
 
-            if (!string.IsNullOrEmpty(Data.SelectedTable))
+            if (!string.IsNullOrEmpty(Data.SelectedView))
             {
                 if (GUILayout.Button("Export JSON", GUILayout.Width(85)))
                 {
-                    _jsonService.ExportTableToJson(Data.SelectedTable);
+                    _jsonService.ExportViewToJson(Data.SelectedView);
                     GUIUtility.ExitGUI();
                 }
 
                 if (GUILayout.Button("Import JSON", GUILayout.Width(85)))
                 {
-                    _jsonService.ImportTableFromJson(Data.SelectedTable);
+                    _jsonService.ImportViewFromJson(Data.SelectedView);
                     GUIUtility.ExitGUI();
                 }
             }
@@ -108,9 +108,9 @@ namespace PicoShot.Localization.Editor.Tabs
         private void DrawAddKeySection()
         {
             EditorGUILayout.BeginVertical("box");
-            string title = string.IsNullOrEmpty(Data.SelectedTable)
+            string title = string.IsNullOrEmpty(Data.SelectedView)
                 ? "Add New Key"
-                : $"Add New Key to '{Data.SelectedTable}'";
+                : $"Add New Key to '{Data.SelectedView}'";
             EditorGUILayout.LabelField(title, EditorStyles.boldLabel);
 
             EditorGUILayout.BeginHorizontal();
@@ -251,7 +251,7 @@ namespace PicoShot.Localization.Editor.Tabs
                     typeIndicator = "[ ]";
             }
 
-            string displayKeyName = string.IsNullOrEmpty(Data.SelectedTable) ? key : Data.GetLocalKeyName(key);
+            string displayKeyName = string.IsNullOrEmpty(Data.SelectedView) ? key : Data.GetLocalKeyName(key);
             string buttonLabel = $"<color=#888888>{typeIndicator}</color> {displayKeyName}";
 
             if (GUI.Button(keyRect, buttonLabel, keyStyle))
@@ -551,7 +551,7 @@ namespace PicoShot.Localization.Editor.Tabs
             string cleanKey = _newKey?.Trim();
             if (string.IsNullOrEmpty(cleanKey)) return;
 
-            string fullKey = string.IsNullOrEmpty(Data.SelectedTable) ? cleanKey : $"{Data.SelectedTable}.{cleanKey}";
+            string fullKey = string.IsNullOrEmpty(Data.SelectedView) ? cleanKey : $"{Data.SelectedView}{Data.CurrentViewDelimiter}{cleanKey}";
             if (Data.AddKey(fullKey, isArray))
             {
                 if (!string.IsNullOrEmpty(_newValue))
@@ -585,7 +585,7 @@ namespace PicoShot.Localization.Editor.Tabs
         {
             var key = Data.SelectedKey;
             string localName = Data.GetLocalKeyName(key);
-            string prefix = string.IsNullOrEmpty(Data.SelectedTable) ? "" : $"{Data.SelectedTable}.";
+            string prefix = string.IsNullOrEmpty(Data.SelectedView) ? "" : $"{Data.SelectedView}{Data.CurrentViewDelimiter}";
 
             OpenTextEditor(localName, (newLocalKey) =>
             {

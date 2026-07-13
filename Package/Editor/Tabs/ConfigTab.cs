@@ -84,6 +84,7 @@ namespace PicoShot.Localization.Editor.Tabs
         private void DrawGeneralTab(LocalizationConfig config)
         {
             DrawDefaultLanguageSection(config);
+            DrawKeyViewSettings();
             DrawTextProcessingSettings(config);
             DrawCompressionSettings(config);
             DrawProtectionSettings(config);
@@ -117,6 +118,27 @@ namespace PicoShot.Localization.Editor.Tabs
             }
             EditorGUILayout.EndHorizontal();
 
+            EditorGUILayout.Space();
+        }
+
+        private void DrawKeyViewSettings()
+        {
+            EditorGUILayout.LabelField("Key Views", EditorStyles.boldLabel);
+
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField("Grouping Delimiter:", GUILayout.Width(150));
+            int delimiterIndex = Data.ActiveViewDelimiter == ViewDelimiter.Dot ? 0 : 1;
+            int newDelimiterIndex = EditorGUILayout.Popup(delimiterIndex, new[] { "Dot . (standard)", "Underscore _ (legacy)" });
+            var newDelimiter = newDelimiterIndex == 0 ? ViewDelimiter.Dot : ViewDelimiter.Underscore;
+            if (newDelimiter != Data.ActiveViewDelimiter)
+            {
+                Data.ActiveViewDelimiter = newDelimiter;
+                Data.SelectedView = "";
+                GUI.FocusControl(null);
+            }
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.HelpBox("Views group keys by the first delimiter. This changes editor grouping only; existing key names are not renamed.", MessageType.Info);
             EditorGUILayout.Space();
         }
 

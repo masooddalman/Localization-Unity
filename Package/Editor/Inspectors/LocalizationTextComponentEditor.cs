@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
+using PicoShot.Localization.Editor.Data;
 
 namespace PicoShot.Localization.Editor.Inspectors
 {
@@ -15,12 +16,15 @@ namespace PicoShot.Localization.Editor.Inspectors
         private SerializedProperty _formatParametersProp;
         private SerializedProperty _onTextUpdatedProp;
 
-        private string _selectedTable = "All Keys";
-        private List<string> _availableTables = new List<string>();
+        private string _selectedView = "All Keys";
+        private List<string> _availableViews = new List<string>();
         private List<string> _availableKeys = new List<string>();
         private List<string> _displayKeys = new List<string>();
         
         private bool _isDataInitialized = false;
+        private char _lastViewDelimiter;
+
+        private static char GetViewDelimiter() => LanguageEditorData.GetCurrentViewDelimiter();
 
         private void OnEnable()
         {
@@ -31,20 +35,21 @@ namespace PicoShot.Localization.Editor.Inspectors
             _onTextUpdatedProp = serializedObject.FindProperty("onTextUpdated");
             
             RefreshData();
-            SyncSelectedTableWithKey();
+            SyncSelectedViewWithKey();
         }
 
-        private void SyncSelectedTableWithKey()
+        private void SyncSelectedViewWithKey()
         {
             if (_translationKeyProp == null) return;
             string fullKey = _translationKeyProp.stringValue;
+            char delimiter = GetViewDelimiter();
             
-            if (!string.IsNullOrEmpty(fullKey) && fullKey.Contains("."))
+            if (!string.IsNullOrEmpty(fullKey) && fullKey.Contains(delimiter))
             {
-                string table = fullKey.Substring(0, fullKey.IndexOf('.')).ToLowerInvariant();
-                if (_availableTables.Any(t => t.Equals(table, StringComparison.OrdinalIgnoreCase)))
+                string view = fullKey.Substring(0, fullKey.IndexOf(delimiter)).ToLowerInvariant();
+                if (_availableViews.Any(v => v.Equals(view, StringComparison.OrdinalIgnoreCase)))
                 {
-                    _selectedTable = _availableTables.First(t => t.Equals(table, StringComparison.OrdinalIgnoreCase));
+                    _selectedView = _availableViews.First(v => v.Equals(view, StringComparison.OrdinalIgnoreCase));
                     UpdateDisplayKeys();
                 }
             }
@@ -54,19 +59,24 @@ namespace PicoShot.Localization.Editor.Inspectors
         {
             var keys = LocalizationManager.AllTranslationKeys.ToList();
             
-            // Extract tables
-            var tables = keys.Where(k => k.Contains('.'))
-                             .Select(k => k.Substring(0, k.IndexOf('.')))
+            // Extract views
+            char delimiter = GetViewDelimiter();
+            var views = keys.Where(k => k.Contains(delimiter))
+                             .Select(k => k.Substring(0, k.IndexOf(delimiter)))
                              .Distinct()
                              .OrderBy(t => t)
                              .ToList();
                              
-            _availableTables.Clear();
-            _availableTables.Add("All Keys");
-            _availableTables.AddRange(tables);
+            _availableViews.Clear();
+            _availableViews.Add("All Keys");
+            _availableViews.AddRange(views);
+
+            if (!_availableViews.Contains(_selectedView))
+                _selectedView = "All Keys";
 
             _availableKeys = keys.OrderBy(k => k).ToList();
             UpdateDisplayKeys();
+            _lastViewDelimiter = delimiter;
             
             _isDataInitialized = true;
         }
@@ -74,13 +84,13 @@ namespace PicoShot.Localization.Editor.Inspectors
         private void UpdateDisplayKeys()
         {
             _displayKeys.Clear();
-            if (_selectedTable == "All Keys")
+            if (_selectedView == "All Keys")
             {
                 _displayKeys.AddRange(_availableKeys);
             }
             else
             {
-                string prefix = _selectedTable + ".";
+                string prefix = _selectedView + GetViewDelimiter();
                 var filtered = _availableKeys.Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList();
                 foreach(var key in filtered)
                 {
@@ -106,29 +116,30 @@ namespace PicoShot.Localization.Editor.Inspectors
 
             EditorGUILayout.Space();
 
-            if (!_isDataInitialized)
+            if (!_isDataInitialized || _lastViewDelimiter != GetViewDelimiter())
             {
                 RefreshData();
+                SyncSelectedViewWithKey();
             }
 
-            // --- TABLE SELECTION ---
+            // --- VIEW SELECTION ---
             EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.PrefixLabel("Table");
+            EditorGUILayout.PrefixLabel("View");
             
-            var tableRect = EditorGUILayout.GetControlRect(GUILayout.ExpandWidth(true));
-            int tableIndex = _availableTables.IndexOf(_selectedTable);
-            if (tableIndex < 0) tableIndex = 0;
+            var viewRect = EditorGUILayout.GetControlRect(GUILayout.ExpandWidth(true));
+            int viewIndex = _availableViews.IndexOf(_selectedView);
+            if (viewIndex < 0) viewIndex = 0;
             
-            if (EditorGUI.DropdownButton(tableRect, new GUIContent(_availableTables[tableIndex]), FocusType.Keyboard, EditorStyles.popup))
+            if (EditorGUI.DropdownButton(viewRect, new GUIContent(_availableViews[viewIndex]), FocusType.Keyboard, EditorStyles.popup))
             {
-                LocalizationSearchablePopup.Show(tableRect, _availableTables.ToArray(), tableIndex, (index) =>
+                LocalizationSearchablePopup.Show(viewRect, _availableViews.ToArray(), viewIndex, (index) =>
                 {
-                    if (index >= 0 && index < _availableTables.Count && _selectedTable != _availableTables[index])
+                    if (index >= 0 && index < _availableViews.Count && _selectedView != _availableViews[index])
                     {
-                        _selectedTable = _availableTables[index];
+                        _selectedView = _availableViews[index];
                         UpdateDisplayKeys();
                         
-                        // Clear the selected key when table changes
+                        // Clear the selected key when view changes
                         _translationKeyProp.stringValue = "";
                         serializedObject.ApplyModifiedProperties();
                         
@@ -154,11 +165,11 @@ namespace PicoShot.Localization.Editor.Inspectors
             string currentFullKey = _translationKeyProp.stringValue ?? "";
             string currentDisplayKey = currentFullKey;
             
-            if (_selectedTable != "All Keys" && currentFullKey.StartsWith(_selectedTable + ".", StringComparison.OrdinalIgnoreCase))
+            if (_selectedView != "All Keys" && currentFullKey.StartsWith(_selectedView + GetViewDelimiter(), StringComparison.OrdinalIgnoreCase))
             {
-                currentDisplayKey = currentFullKey.Substring(_selectedTable.Length + 1);
+                currentDisplayKey = currentFullKey.Substring(_selectedView.Length + 1);
             }
-            else if (_selectedTable != "All Keys" && !string.IsNullOrEmpty(currentFullKey))
+            else if (_selectedView != "All Keys" && !string.IsNullOrEmpty(currentFullKey))
             {
                 currentDisplayKey = $"[{currentFullKey}]";
             }
@@ -177,7 +188,7 @@ namespace PicoShot.Localization.Editor.Inspectors
                     if (index >= 0 && index < _displayKeys.Count)
                     {
                         string newLocalKey = _displayKeys[index];
-                        string newFullKey = _selectedTable == "All Keys" ? newLocalKey : $"{_selectedTable}.{newLocalKey}";
+                        string newFullKey = _selectedView == "All Keys" ? newLocalKey : $"{_selectedView}{GetViewDelimiter()}{newLocalKey}";
                         
                         _translationKeyProp.stringValue = newFullKey;
                         serializedObject.ApplyModifiedProperties();

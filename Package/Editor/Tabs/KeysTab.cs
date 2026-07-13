@@ -302,12 +302,6 @@ namespace PicoShot.Localization.Editor.Tabs
                 GUILayout.ExpandHeight(true),
                 GUILayout.MaxHeight(float.MaxValue));
 
-            if (Data.LastSelectedKey != Data.SelectedKey)
-            {
-                Data.ClearKeyHint();
-                Data.LastSelectedKey = Data.SelectedKey;
-            }
-
             if (!string.IsNullOrEmpty(Data.SelectedKey))
             {
                 EditorGUILayout.LabelField($"Key Details: {Data.SelectedKey}", EditorStyles.boldLabel);
@@ -315,9 +309,6 @@ namespace PicoShot.Localization.Editor.Tabs
                     Data.KeyDetailsScroll,
                     GUILayout.ExpandHeight(true),
                     GUILayout.MaxHeight(float.MaxValue));
-
-                DrawTranslationHintField();
-                EditorGUILayout.Space(5);
 
                 if (Data.LanguageData.TryGetValue(Data.SelectedKey, out var text))
                 {
@@ -339,23 +330,6 @@ namespace PicoShot.Localization.Editor.Tabs
             else
             {
                 DrawHelpBox("Select a key from the list to view and edit its details.");
-            }
-
-            EditorGUILayout.EndVertical();
-        }
-
-        private void DrawTranslationHintField()
-        {
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            EditorGUILayout.LabelField("Translation Hint (for DeepL):", EditorStyles.miniBoldLabel);
-
-            GUI.SetNextControlName($"TranslationHint_{Data.SelectedKey}");
-            Data.CurrentKeyHint = EditorGUILayout.TextArea(Data.CurrentKeyHint, GUILayout.MinHeight(40));
-
-            if (string.IsNullOrEmpty(Data.CurrentKeyHint))
-            {
-                EditorGUILayout.LabelField($"Example: '{Data.SelectedKey}' should be translated as verb not noun",
-                    EditorStyles.miniLabel);
             }
 
             EditorGUILayout.EndVertical();

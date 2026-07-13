@@ -75,7 +75,6 @@ namespace PicoShot.Localization.Editor.Services
                 return;
             }
 
-            string keyHint = _data.SelectedKey == key ? _data.CurrentKeyHint : "";
             var targetLanguages = _data.LanguageCodes.Where(l => l != sourceLang && string.IsNullOrWhiteSpace(keyData[l]?.ToString())).ToList();
 
             if (targetLanguages.Count == 0)
@@ -83,7 +82,7 @@ namespace PicoShot.Localization.Editor.Services
 
             if (_data.ActiveTranslationProvider == TranslationProvider.Gemini)
             {
-                await TranslateWithGeminiBatchAsync(sourceText, sourceLang, targetLanguages, keyData, keyHint, -1);
+                await TranslateWithGeminiBatchAsync(sourceText, sourceLang, targetLanguages, keyData, -1);
                 return;
             }
 
@@ -94,7 +93,7 @@ namespace PicoShot.Localization.Editor.Services
 
                 try
                 {
-                    var translated = await TranslateText(sourceText, sourceLang, lang, keyHint);
+                    var translated = await TranslateText(sourceText, sourceLang, lang);
                     if (!string.IsNullOrEmpty(translated))
                     {
                         keyData[lang] = translated;
@@ -144,7 +143,6 @@ namespace PicoShot.Localization.Editor.Services
                 return;
             }
 
-            string keyHint = _data.SelectedKey == key ? _data.CurrentKeyHint : "";
             var targetLanguages = _data.LanguageCodes.Where(l => l != sourceLang).ToList();
 
             // Initialize target arrays if needed
@@ -196,7 +194,7 @@ namespace PicoShot.Localization.Editor.Services
 
                 if (_data.ActiveTranslationProvider == TranslationProvider.Gemini)
                 {
-                    await TranslateWithGeminiBatchAsync(sourceText, sourceLang, missingForElement, keyData, keyHint, i);
+                    await TranslateWithGeminiBatchAsync(sourceText, sourceLang, missingForElement, keyData, i);
                     continue;
                 }
 
@@ -208,7 +206,7 @@ namespace PicoShot.Localization.Editor.Services
 
                     try
                     {
-                        var translated = await TranslateText(sourceText, sourceLang, lang, keyHint);
+                        var translated = await TranslateText(sourceText, sourceLang, lang);
                         targetArray[i] = !string.IsNullOrEmpty(translated) ? translated : sourceText;
                         _data.HasUnsavedChanges = true;
                         await Task.Delay(LanguageEditorData.DeeplRequestDelayMs);
@@ -226,23 +224,17 @@ namespace PicoShot.Localization.Editor.Services
         /// <summary>
         /// Translates text using DeepL API.
         /// </summary>
-        private async Task<string> TranslateText(string text, string sourceLang, string targetLang, string keyHint = "")
+        private async Task<string> TranslateText(string text, string sourceLang, string targetLang)
         {
             string deeplSourceLang = sourceLang.ToUpperInvariant();
             string deeplTargetLang = targetLang.ToUpperInvariant();
-
-            string context = _data.DeeplContext;
-            if (!string.IsNullOrWhiteSpace(keyHint))
-            {
-                context += $"\n\nSpecific instruction for this text: {keyHint}";
-            }
 
             var requestBody = new DeepLTranslateRequest
             {
                 text = new[] { text },
                 source_lang = deeplSourceLang,
                 target_lang = deeplTargetLang,
-                context = context
+                context = _data.DeeplContext
             };
 
             string jsonBody = JsonUtility.ToJson(requestBody);
@@ -312,7 +304,7 @@ namespace PicoShot.Localization.Editor.Services
 
         // --- Gemini Implementation ---
 
-        private async Task TranslateWithGeminiBatchAsync(string sourceText, string sourceLang, List<string> targetLanguages, Dictionary<string, object> keyData, string keyHint, int arrayIndex)
+        private async Task TranslateWithGeminiBatchAsync(string sourceText, string sourceLang, List<string> targetLanguages, Dictionary<string, object> keyData, int arrayIndex)
         {
             string apiKey = _data.GeminiApiKey;
             if (string.IsNullOrEmpty(apiKey))
@@ -326,11 +318,6 @@ namespace PicoShot.Localization.Editor.Services
 
             string systemPrompt = _data.GeminiContext;
             string userPrompt = $"Source Language: {sourceLang}\nTarget Languages (keys): {string.Join(", ", targetLanguages)}\nSource Text:\n{sourceText}";
-            if (!string.IsNullOrWhiteSpace(keyHint))
-            {
-                userPrompt += $"\n\nContext for this specific text: {keyHint}";
-            }
-
             var requestBody = new GeminiRequest
             {
                 system_instruction = new GeminiContent { parts = new[] { new GeminiPart { text = systemPrompt } } },

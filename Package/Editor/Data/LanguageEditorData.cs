@@ -22,7 +22,6 @@ namespace PicoShot.Localization.Editor.Data
         // State
         public bool HasUnsavedChanges { get; set; }
         public string SelectedKey { get; set; }
-        public string LastSelectedKey { get; set; }
         public string SelectedTable { get; set; } = "";
 
         // Search & Filters
@@ -50,9 +49,6 @@ namespace PicoShot.Localization.Editor.Data
         public Vector2 ComponentsScrollPosition { get; set; }
         public Vector2 ToolsScrollPosition { get; set; }
         public Vector2 CharsetLanguageScrollPos { get; set; }
-
-        // Translation Hint
-        public string CurrentKeyHint { get; set; } = "";
 
         // Test Data
         public string TestKey { get; set; } = "";
@@ -254,23 +250,12 @@ namespace PicoShot.Localization.Editor.Data
         }
 
         /// <summary>
-        /// Clears hint and keyboard focus when switching keys.
-        /// </summary>
-        public void ClearKeyHint()
-        {
-            CurrentKeyHint = "";
-            GUIUtility.keyboardControl = 0;
-        }
-
-        /// <summary>
         /// Resets all data to initial state.
         /// </summary>
         public void Reset()
         {
             HasUnsavedChanges = false;
             SelectedKey = null;
-            LastSelectedKey = null;
-            CurrentKeyHint = "";
             Keys.Clear();
             LanguageData.Clear();
             KeyFoldouts.Clear();

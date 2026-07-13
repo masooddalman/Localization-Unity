@@ -67,7 +67,8 @@ namespace PicoShot.Localization.Editor.Data
         public Dictionary<string, Dictionary<string, object>> LanguageData { get; private set; } = new();
         public Dictionary<string, bool> KeyFoldouts { get; } = new();
         public Dictionary<string, bool> LanguageSelectionForCharset { get; } = new();
-        public Dictionary<string, string> GeneratedCharsets { get; } = new();
+        public string GeneratedCharset { get; private set; } = "";
+        public bool HasGeneratedCharset { get; private set; }
 
         // Translation Provider Settings
         public const string TranslationProviderPref = "PicoShot_Localization_TranslationProvider";
@@ -261,7 +262,8 @@ namespace PicoShot.Localization.Editor.Data
             KeyFoldouts.Clear();
             LanguageCodes.Clear();
             LanguageCodes.Add(LocalizationConfigProvider.Config.DefaultLanguage);
-            GeneratedCharsets.Clear();
+            GeneratedCharset = "";
+            HasGeneratedCharset = false;
         }
 
         /// <summary>
@@ -492,26 +494,32 @@ namespace PicoShot.Localization.Editor.Data
         }
 
         /// <summary>
-        /// Generates character sets for selected languages.
+        /// Generates one deduplicated, consistently ordered character set for all selected languages.
         /// </summary>
-        public void GenerateCharsets()
+        public void GenerateCharset()
         {
-            GeneratedCharsets.Clear();
+            var charSet = new HashSet<char>();
 
             foreach (var lang in LanguageCodes.Where(l => LanguageSelectionForCharset[l]))
             {
-                var charSet = new HashSet<char>();
-
                 foreach (var key in Keys)
                 {
                     if (LanguageData[key].TryGetValue(lang, out var value))
-                    {
                         AddValueToCharset(value, charSet);
-                    }
                 }
-
-                GeneratedCharsets[lang] = new string(charSet.ToArray());
             }
+
+            GeneratedCharset = new string(charSet.OrderBy(c => c).ToArray());
+            HasGeneratedCharset = true;
+        }
+
+        /// <summary>
+        /// Clears the generated charset after its language selection changes.
+        /// </summary>
+        public void ClearGeneratedCharset()
+        {
+            GeneratedCharset = "";
+            HasGeneratedCharset = false;
         }
 
         private static void AddValueToCharset(object value, HashSet<char> charSet)

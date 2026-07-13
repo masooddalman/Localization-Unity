@@ -75,10 +75,18 @@ namespace PicoShot.Localization.Editor.Tabs
             Data.ToolsScrollPosition = EditorGUILayout.BeginScrollView(Data.ToolsScrollPosition, GUILayout.ExpandHeight(true));
 
             EditorGUILayout.LabelField("Charset Generation Tool", EditorStyles.boldLabel);
+            EditorGUILayout.HelpBox("Generate one deduplicated charset from all selected languages. Characters are sorted for consistent output.", MessageType.Info);
 
             Data.SyncCharsetLanguageSelection();
 
+            EditorGUILayout.BeginHorizontal();
             EditorGUILayout.LabelField("Select Languages:", EditorStyles.boldLabel);
+            if (GUILayout.Button("Select All", GUILayout.Width(75)))
+                SetCharsetLanguageSelection(true);
+            if (GUILayout.Button("Clear", GUILayout.Width(55)))
+                SetCharsetLanguageSelection(false);
+            EditorGUILayout.EndHorizontal();
+
             Data.CharsetLanguageScrollPos = EditorGUILayout.BeginScrollView(Data.CharsetLanguageScrollPos, GUILayout.Height(200));
             foreach (var lang in Data.LanguageCodes)
             {
@@ -88,51 +96,61 @@ namespace PicoShot.Localization.Editor.Tabs
                 if (newState != currentState)
                 {
                     Data.LanguageSelectionForCharset[lang] = newState;
-                    Data.HasUnsavedChanges = true;
+                    Data.ClearGeneratedCharset();
                 }
             }
             EditorGUILayout.EndScrollView();
 
             bool anySelected = Data.LanguageSelectionForCharset.Any(kvp => kvp.Value);
             EditorGUI.BeginDisabledGroup(!anySelected);
-            if (GUILayout.Button("Generate Charsets", GUILayout.Height(30)))
+            if (GUILayout.Button("Generate Charset", GUILayout.Height(30)))
             {
-                Data.GenerateCharsets();
+                Data.GenerateCharset();
             }
             EditorGUI.EndDisabledGroup();
 
-            if (Data.GeneratedCharsets.Count > 0)
+            if (Data.HasGeneratedCharset)
             {
-                DrawGeneratedCharsets();
+                DrawGeneratedCharset();
             }
 
             EditorGUILayout.EndScrollView();
         }
 
-        private void DrawGeneratedCharsets()
+        private void SetCharsetLanguageSelection(bool selected)
         {
-            EditorGUILayout.Space();
-            EditorGUILayout.LabelField("Generated Charsets:", EditorStyles.boldLabel);
-
-            foreach (var kvp in Data.GeneratedCharsets)
+            bool hasChanges = false;
+            foreach (var lang in Data.LanguageCodes)
             {
-                string lang = kvp.Key;
-                string charset = kvp.Value;
-                string langName = LanguageDefinitions.GetDisplayName(lang);
+                if (Data.LanguageSelectionForCharset[lang] == selected)
+                    continue;
 
-                EditorGUILayout.BeginVertical("box");
-                EditorGUILayout.LabelField($"Language: {langName} ({lang})", EditorStyles.boldLabel);
-                EditorGUILayout.LabelField($"Unique Characters: {charset.Length}");
-                EditorGUILayout.SelectableLabel(charset, EditorStyles.textArea, GUILayout.Height(50));
-
-                if (GUILayout.Button("Copy to Clipboard", GUILayout.Width(150)))
-                {
-                    EditorGUIUtility.systemCopyBuffer = charset;
-                    Editor.ShowNotification(new GUIContent($"Charset for {langName} copied to clipboard!"));
-                }
-
-                EditorGUILayout.EndVertical();
+                Data.LanguageSelectionForCharset[lang] = selected;
+                hasChanges = true;
             }
+
+            if (hasChanges)
+                Data.ClearGeneratedCharset();
+        }
+
+        private void DrawGeneratedCharset()
+        {
+            string charset = Data.GeneratedCharset;
+            int selectedLanguageCount = Data.LanguageSelectionForCharset.Count(kvp => kvp.Value);
+
+            EditorGUILayout.Space();
+            EditorGUILayout.BeginVertical("box");
+            EditorGUILayout.LabelField("Generated Charset", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField($"Languages included: {selectedLanguageCount} | Unique characters: {charset.Length}");
+            EditorGUILayout.SelectableLabel(charset, EditorStyles.textArea, GUILayout.MinHeight(50));
+
+            if (GUILayout.Button("Copy to Clipboard", GUILayout.Width(150)))
+            {
+                EditorGUIUtility.systemCopyBuffer = charset;
+                Editor.ShowNotification(new GUIContent("Charset copied to clipboard!"));
+            }
+
+            EditorGUILayout.EndVertical();
         }
 
         #endregion

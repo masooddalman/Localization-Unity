@@ -195,6 +195,9 @@ namespace PicoShot.Localization
 
                 if (_availableLanguages.Count == 0)
                 {
+#if UNITY_EDITOR
+                    return;
+#else
                     string error = $"[LocalizationManager] No language files found in: {LanguagesPath}";
                     if (IsCloneEditor())
                     {
@@ -207,6 +210,7 @@ namespace PicoShot.Localization
                     OnLanguageLoadError?.Invoke(error);
                     _isInitialized = false;
                     return;
+#endif
                 }
 
                 string targetLanguage = !string.IsNullOrEmpty(_currentLanguageCode) && _availableLanguages.Contains(_currentLanguageCode)
@@ -274,7 +278,9 @@ namespace PicoShot.Localization
             {
                 if (!Directory.Exists(LanguagesPath))
                 {
+#if !UNITY_EDITOR
                     Debug.LogWarning($"[LocalizationManager] Languages directory not found: {LanguagesPath}");
+#endif
                     return;
                 }
 

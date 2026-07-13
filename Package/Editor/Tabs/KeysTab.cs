@@ -573,6 +573,9 @@ namespace PicoShot.Localization.Editor.Tabs
 
                 _newKey = "";
                 _newValue = "";
+                GUI.FocusControl(null);
+                GUIUtility.keyboardControl = 0;
+                EditorUtility.SetDirty(Editor);
                 Editor.Repaint();
             }
             else

@@ -149,7 +149,7 @@ namespace PicoShot.Localization
 
             if (_filteredItems.Count == 0)
             {
-                EditorGUILayout.HelpBox("No matches found", MessageType.Info);
+                EditorGUILayout.HelpBox("No matches found", MessageType.None);
             }
 
             EditorGUILayout.EndScrollView();

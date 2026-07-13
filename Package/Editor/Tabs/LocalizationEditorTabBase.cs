@@ -48,7 +48,7 @@ namespace PicoShot.Localization.Editor.Tabs
         /// <summary>
         /// Helper to draw a help box with a message.
         /// </summary>
-        protected static void DrawHelpBox(string message, MessageType type = MessageType.Info)
+        protected static void DrawHelpBox(string message, MessageType type = MessageType.None)
         {
             EditorGUILayout.HelpBox(message, type);
         }

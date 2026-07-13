@@ -138,7 +138,7 @@ namespace PicoShot.Localization.Editor.Tabs
             }
             EditorGUILayout.EndHorizontal();
 
-            EditorGUILayout.HelpBox("Views group keys by the first delimiter. This changes editor grouping only; existing key names are not renamed.", MessageType.Info);
+            EditorGUILayout.HelpBox("Views group keys by the first delimiter. This changes editor grouping only; existing key names are not renamed.", MessageType.None);
             EditorGUILayout.Space();
         }
 
@@ -158,7 +158,7 @@ namespace PicoShot.Localization.Editor.Tabs
 
             if (config.SupportMixedText)
             {
-                EditorGUILayout.HelpBox("Token-based Bi-Directional text rendering is enabled. This will dynamically isolate and fix RTL strings without breaking LTR words and punctuation.", MessageType.Info);
+                EditorGUILayout.HelpBox("Token-based Bi-Directional text rendering is enabled. This will dynamically isolate and fix RTL strings without breaking LTR words and punctuation.", MessageType.None);
             }
 
             EditorGUILayout.Space();
@@ -186,7 +186,7 @@ namespace PicoShot.Localization.Editor.Tabs
                 CompressionMode.Optimal => "Best compression ratio. Smaller files but slower saves. Recommended for builds.",
                 _ => ""
             };
-            EditorGUILayout.HelpBox(compressionHelp, MessageType.Info);
+            EditorGUILayout.HelpBox(compressionHelp, MessageType.None);
 
             EditorGUILayout.Space();
         }

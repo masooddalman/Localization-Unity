@@ -75,7 +75,7 @@ namespace PicoShot.Localization.Editor.Tabs
             Data.ToolsScrollPosition = EditorGUILayout.BeginScrollView(Data.ToolsScrollPosition, GUILayout.ExpandHeight(true));
 
             EditorGUILayout.LabelField("Charset Generation Tool", EditorStyles.boldLabel);
-            EditorGUILayout.HelpBox("Generate one deduplicated charset from all selected languages. Characters are sorted for consistent output.", MessageType.Info);
+            EditorGUILayout.HelpBox("Generate one deduplicated charset from all selected languages. Characters are sorted for consistent output.", MessageType.None);
 
             Data.SyncCharsetLanguageSelection();
 

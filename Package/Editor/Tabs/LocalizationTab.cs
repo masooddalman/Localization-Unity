@@ -228,7 +228,7 @@ namespace PicoShot.Localization.Editor.Tabs
 
             EditorGUILayout.BeginVertical(GUILayout.Width(300));
             EditorGUILayout.LabelField("Language-Specific Fonts", EditorStyles.boldLabel, GUILayout.Height(30));
-            EditorGUILayout.HelpBox("The Font System is currently disabled. Enable it to assign specific fonts to different languages, which will automatically update UI text components when the language changes.", MessageType.Info);
+            EditorGUILayout.HelpBox("The Font System is currently disabled. Enable it to assign specific fonts to different languages, which will automatically update UI text components when the language changes.", MessageType.None);
 
             EditorGUILayout.Space();
 

@@ -115,7 +115,16 @@ namespace PicoShot.Localization.Editor.Tabs
 
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.LabelField("Key Name:", GUILayout.Width(130));
-            _newKey = LocalizationTextEditorPopup.FilterKeyName(EditorGUILayout.TextField(_newKey));
+            Rect keyNameRect = EditorGUILayout.GetControlRect();
+            _newKey = LocalizationTextEditorPopup.FilterKeyName(EditorGUI.TextField(keyNameRect, _newKey));
+            if (string.IsNullOrEmpty(_newKey) && Event.current.type == EventType.Repaint)
+            {
+                var placeholderRect = new Rect(keyNameRect.x + 4f, keyNameRect.y, keyNameRect.width - 8f, keyNameRect.height);
+                Color previousColor = GUI.contentColor;
+                GUI.contentColor = new Color(0.55f, 0.55f, 0.55f);
+                GUI.Label(placeholderRect, "e.g. UI.Settings.Shadow_Quality", EditorStyles.miniLabel);
+                GUI.contentColor = previousColor;
+            }
             EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.BeginHorizontal();

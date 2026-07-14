@@ -55,6 +55,7 @@ namespace PicoShot.Localization.Bloc
                 using var contentWriter = new BinaryWriter(contentStream);
 
                 contentStream.Position = MAGIC_AND_VERSION_SIZE + HEADER_SIZE;
+                contentStream.SetLength(MAGIC_AND_VERSION_SIZE + HEADER_SIZE);
 
                 var stringPool = new Dictionary<string, int>();
                 foreach (var kvp in entries)
@@ -122,7 +123,7 @@ namespace PicoShot.Localization.Bloc
                     WriteHeader(contentWriter, header);
 
                     using var deflateStream = new DeflateStream(writer.BaseStream, compressionLevel, true);
-                    
+
                     contentStream.Position = 0;
                     contentStream.WriteTo(deflateStream);
 
@@ -143,7 +144,7 @@ namespace PicoShot.Localization.Bloc
                             int r = contentStream.Read(tempBuffer, 0, TEMPBUFFER_SIZE);
                             if (r == 0)
                                 break;
-                                
+
                             writer.Write(tempBuffer, 0, r);
                             ComputeCrc32(ref crc, tempBuffer[..r]);
                             totalRead += r;

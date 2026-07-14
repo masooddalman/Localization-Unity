@@ -85,6 +85,7 @@ namespace PicoShot.Localization.Bloc
                 using var contentWriter = new BinaryWriter(contentStream);
 
                 contentStream.Position = MAGIC_AND_VERSION_SIZE + HEADER_SIZE;
+                contentStream.SetLength(CONTENT_START);
 
                 var stringPool = new Dictionary<string, int>();
 

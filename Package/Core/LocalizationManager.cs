@@ -586,6 +586,53 @@ namespace PicoShot.Localization
             return text;
         }
 
+        internal static string GetLogicalText(string key, params object[] args)
+        {
+            if (string.IsNullOrEmpty(key)) return string.Empty;
+            if (!_isInitialized) Initialize();
+            
+            string text = GetRawText(key);
+
+            if (args != null && args.Length > 0)
+            {
+                var resolvedArgs = new string[args.Length];
+                for (int i = 0; i < args.Length; i++)
+                {
+                    resolvedArgs[i] = args[i] switch
+                    {
+                        Key k => GetRawText(k.Value),
+                        null => string.Empty,
+                        string s => s,
+                        _ => args[i].ToString()
+                    };
+                }
+                text = string.Format(text, resolvedArgs);
+            }
+
+            // We do NOT shape or reverse the text here. 
+            // We want the pure, raw, unshaped text so TMP can calculate line breaks accurately.
+            return text;
+        }
+
+        internal static string GetLogicalArrayText(string key, int index)
+        {
+            if (string.IsNullOrEmpty(key)) return string.Empty;
+            if (!_isInitialized) Initialize();
+
+            string[] array = GetArrayInternal(Key.FromKey(key));
+            if (array == null || array.Length == 0)
+            {
+                Debug.LogWarning($"[LocalizationManager] Key '{key}' is not an array or is empty");
+                return $"[{key}]";
+            }
+
+            if (index >= 0 && index < array.Length)
+                return array[index] ?? string.Empty;
+
+            Debug.LogWarning($"[LocalizationManager] Array index {index} out of range for key '{key}'");
+            return $"[{key}:{index}]";
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static string GetText(long keyHash, params object[] args)
         {

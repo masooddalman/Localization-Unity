@@ -5,6 +5,9 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
+using PicoShot.Localization.Config;
+using PicoShot.Localization.Rtl;
 
 namespace PicoShot.Localization
 {
@@ -14,7 +17,7 @@ namespace PicoShot.Localization
     /// </summary>
     [AddComponentMenu("UI/Localized Text")]
     [DisallowMultipleComponent]
-    public class LocalizationTextComponent : MonoBehaviour
+    public class LocalizationTextComponent : UIBehaviour
     {
         #region Inspector Fields
 
@@ -136,6 +139,9 @@ namespace PicoShot.Localization
         private TextMesh _textMesh;
 
         private string _lastText;
+        private string _originalLogicalText;
+        private bool _isFixingTMP;
+        private Vector2 _lastWrappedRectSize = new(float.NaN, float.NaN);
         private bool _isInitialized;
         private readonly List<Func<string, string>> _textProcessors = new();
 
@@ -143,13 +149,15 @@ namespace PicoShot.Localization
 
         #region Unity Lifecycle
 
-        private void Awake()
+        protected override void Awake()
         {
+            base.Awake();
             Initialize();
         }
 
-        private void OnEnable()
+        protected override void OnEnable()
         {
+            base.OnEnable();
             LocalizationManager.OnLanguageChanged += UpdateText;
             LocalizationManager.OnFontChanged += UpdateFont;
             if (_isInitialized && Application.isPlaying)
@@ -162,22 +170,25 @@ namespace PicoShot.Localization
             UpdateFont(tmpFont, legacyFont);
         }
 
-        private void OnDisable()
+        protected override void OnDisable()
         {
+            base.OnDisable();
             LocalizationManager.OnLanguageChanged -= UpdateText;
             LocalizationManager.OnFontChanged -= UpdateFont;
         }
 
-        private void OnDestroy()
+        protected override void OnDestroy()
         {
+            base.OnDestroy();
             LocalizationManager.OnLanguageChanged -= UpdateText;
             LocalizationManager.OnFontChanged -= UpdateFont;
             _textProcessors.Clear();
         }
 
 #if UNITY_EDITOR
-        private void OnValidate()
+        protected override void OnValidate()
         {
+            base.OnValidate();
             if (!Application.isPlaying) return;
             if (!_isInitialized) return;
             UnityEditor.EditorApplication.delayCall += () =>
@@ -278,6 +289,9 @@ namespace PicoShot.Localization
                 }
                 if (_textMesh != null) _textMesh.font = legacyFont;
             }
+
+            if (_tmpText != null && LocalizationManager.IsRightToLeft && _originalLogicalText != null)
+                ApplyTMPRtlWrap(_originalLogicalText, force: true);
         }
 
         /// <summary>
@@ -357,6 +371,13 @@ namespace PicoShot.Localization
 
         private void UpdateTextComponent()
         {
+            if (_tmpText != null && LocalizationManager.IsRightToLeft)
+            {
+                string logicalText = ApplyProcessors(GetLogicalTranslatedText());
+                ApplyTMPRtlWrap(logicalText, force: true);
+                return;
+            }
+
             string text = GetTranslatedText();
             text = ApplyProcessors(text);
 
@@ -364,6 +385,7 @@ namespace PicoShot.Localization
 
             if (_tmpText != null)
             {
+                _tmpText.isRightToLeftText = false;
                 _tmpText.text = text;
             }
             else if (_legacyText != null)
@@ -377,6 +399,145 @@ namespace PicoShot.Localization
 
             _lastText = text;
             onTextUpdated?.Invoke(text);
+        }
+
+        private void ApplyTMPRtlWrap(string logicalText, bool force)
+        {
+            if (_tmpText == null || !LocalizationManager.IsRightToLeft || _isFixingTMP) return;
+
+            RectTransform rectTransform = _tmpText.rectTransform;
+            Vector2 rectSize = rectTransform != null
+                ? rectTransform.rect.size
+                : new Vector2(float.PositiveInfinity, float.PositiveInfinity);
+            if (!force && logicalText == _originalLogicalText)
+            {
+                bool widthUnchanged = Mathf.Approximately(rectSize.x, _lastWrappedRectSize.x);
+                bool relevantHeightUnchanged = !_tmpText.enableAutoSizing ||
+                                               Mathf.Approximately(rectSize.y, _lastWrappedRectSize.y);
+                if (widthUnchanged && relevantHeightUnchanged) return;
+            }
+
+            _originalLogicalText = logicalText ?? string.Empty;
+            _lastWrappedRectSize = rectSize;
+            _tmpText.isRightToLeftText = false;
+
+            if (_originalLogicalText.Length == 0)
+            {
+                SetTMPTextAndNotify(string.Empty);
+                return;
+            }
+
+            _isFixingTMP = true;
+            string finalText = null;
+            try
+            {
+                bool supportMixedText = LocalizationConfigProvider.Config != null &&
+                                        LocalizationConfigProvider.Config.SupportMixedText;
+                string shapedLogicalText = RtlTextMeshProHandler.ShapeForMeasurement(
+                    _originalLogicalText,
+                    supportMixedText,
+                    isMainRtl: true,
+                    _tmpText.richText);
+
+                // TMP measures the same shaped glyphs used by the final visual text,
+                // but in logical order so its line sequence remains top-to-bottom.
+                _tmpText.text = shapedLogicalText;
+                _tmpText.ForceMeshUpdate(ignoreActiveState: true, forceTextReparsing: true);
+
+                TMP_TextInfo textInfo = _tmpText.textInfo;
+                int lineCount = textInfo?.lineCount ?? 0;
+                if (lineCount <= 0)
+                {
+                    finalText = string.Empty;
+                }
+                else
+                {
+                    var output = new System.Text.StringBuilder(shapedLogicalText.Length + lineCount);
+                    var markupState = new RtlTextMeshProHandler.MarkupState();
+                    int sourceStart = 0;
+
+                    for (int lineIndex = 0; lineIndex < lineCount; lineIndex++)
+                    {
+                        int sourceEnd = shapedLogicalText.Length;
+                        if (lineIndex < lineCount - 1)
+                        {
+                            int nextCharacterIndex = textInfo.lineInfo[lineIndex + 1].firstCharacterIndex;
+                            if (nextCharacterIndex >= 0 && nextCharacterIndex < textInfo.characterCount)
+                                sourceEnd = textInfo.characterInfo[nextCharacterIndex].index;
+                        }
+
+                        sourceEnd = Mathf.Clamp(sourceEnd, sourceStart, shapedLogicalText.Length);
+                        string shapedLine = shapedLogicalText.Substring(sourceStart, sourceEnd - sourceStart);
+                        output.Append(RtlTextMeshProHandler.ReverseMeasuredLine(
+                            shapedLine,
+                            supportMixedText,
+                            isMainRtl: true,
+                            _tmpText.richText,
+                            markupState));
+
+                        if (lineIndex < lineCount - 1) output.Append('\n');
+                        sourceStart = sourceEnd;
+                    }
+
+                    finalText = output.ToString();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[LocalizationTextComponent] RTL wrapping failed on {gameObject.name}: {ex.Message}", this);
+                try
+                {
+                    finalText = GetSafeRtlFallback(_originalLogicalText);
+                }
+                catch (Exception fallbackException)
+                {
+                    Debug.LogError(
+                        $"[LocalizationTextComponent] RTL fallback failed on {gameObject.name}: {fallbackException.Message}",
+                        this);
+                    finalText = _originalLogicalText;
+                }
+            }
+            finally
+            {
+                _isFixingTMP = false;
+            }
+
+            SetTMPTextAndNotify(finalText ?? string.Empty);
+        }
+
+        private string GetSafeRtlFallback(string logicalText)
+        {
+            bool supportMixedText = LocalizationConfigProvider.Config != null &&
+                                    LocalizationConfigProvider.Config.SupportMixedText;
+            string shaped = RtlTextMeshProHandler.ShapeForMeasurement(
+                logicalText,
+                supportMixedText,
+                isMainRtl: true,
+                _tmpText.richText);
+            return RtlTextMeshProHandler.ReverseMeasuredLine(
+                shaped,
+                supportMixedText,
+                isMainRtl: true,
+                _tmpText.richText,
+                new RtlTextMeshProHandler.MarkupState());
+        }
+
+        private void SetTMPTextAndNotify(string text)
+        {
+            _tmpText.text = text;
+            if (_lastText == text) return;
+
+            _lastText = text;
+            onTextUpdated?.Invoke(text);
+        }
+
+        protected override void OnRectTransformDimensionsChange()
+        {
+            base.OnRectTransformDimensionsChange();
+            if (_tmpText != null && LocalizationManager.IsRightToLeft && _originalLogicalText != null)
+            {
+                ApplyTMPRtlWrap(_originalLogicalText, force: false);
+            }
         }
 
         private void UpdateDropdown()
@@ -463,6 +624,17 @@ namespace PicoShot.Localization
             }
 
             return LocalizationManager.GetText(translationKey);
+        }
+
+        private string GetLogicalTranslatedText()
+        {
+            if (arrayIndex >= 0)
+                return LocalizationManager.GetLogicalArrayText(translationKey, arrayIndex);
+
+            if (formatParameters != null && formatParameters.Length > 0)
+                return LocalizationManager.GetLogicalText(translationKey, formatParameters);
+
+            return LocalizationManager.GetLogicalText(translationKey);
         }
 
         private string ApplyProcessors(string text)

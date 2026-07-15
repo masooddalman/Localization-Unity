@@ -196,18 +196,8 @@ namespace PicoShot.Localization.Rtl
                     ? Reverse(token.Text.ToString())
                     : Fix(token.Text.ToString(), preserveOrder);
 
-            // Convert numbers in LTR tokens if needed, without reversing
-            var text = token.Text.ToString();
-            var sb = new StringBuilder(text.Length);
-            for (int i = 0; i < text.Length; i++)
-            {
-                char c = text[i];
-                if (char.IsDigit(c) && c >= '0' && c <= '9')
-                    sb.Append((char)FixerTool.HandleInduNumber(c, c));
-                else
-                    sb.Append(c);
-            }
-            return sb.ToString();
+            // LTR tokens (English text, rich text tags, etc) remain unchanged
+            return token.Text.ToString();
         }
 
         private static string ProcessLines(string str, Func<string, string> processor)

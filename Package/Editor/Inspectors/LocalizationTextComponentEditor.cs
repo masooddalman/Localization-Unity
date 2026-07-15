@@ -225,4 +225,35 @@ namespace PicoShot.Localization.Editor.Inspectors
             serializedObject.ApplyModifiedProperties();
         }
     }
+    [CustomPropertyDrawer(typeof(MarginAttribute))]
+    public class MarginAttributeDrawer : PropertyDrawer
+    {
+        public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
+        {
+            if (property.propertyType == SerializedPropertyType.Vector4)
+            {
+                EditorGUI.BeginProperty(position, label, property);
+                
+                position = EditorGUI.PrefixLabel(position, GUIUtility.GetControlID(FocusType.Passive), label);
+
+                var labels = new[] { new GUIContent("Left"), new GUIContent("Top"), new GUIContent("Right"), new GUIContent("Bottom") };
+                var values = new float[] { property.vector4Value.x, property.vector4Value.y, property.vector4Value.z, property.vector4Value.w };
+
+                EditorGUI.MultiFloatField(position, labels, values);
+
+                property.vector4Value = new Vector4(values[0], values[1], values[2], values[3]);
+
+                EditorGUI.EndProperty();
+            }
+            else
+            {
+                EditorGUI.PropertyField(position, property, label);
+            }
+        }
+
+        public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
+        {
+            return EditorGUIUtility.singleLineHeight;
+        }
+    }
 }

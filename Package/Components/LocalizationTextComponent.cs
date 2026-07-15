@@ -11,6 +11,8 @@ using PicoShot.Localization.Rtl;
 
 namespace PicoShot.Localization
 {
+    public class MarginAttribute : PropertyAttribute { }
+
     /// <summary>
     /// Component that binds text components (TMP_Text, TMP_Dropdown, Text, Dropdown, TextMesh) to the localization system.
     /// Automatically updates when language changes.
@@ -153,6 +155,7 @@ namespace PicoShot.Localization
         private bool _originalAutoSize;
         private TextAlignmentOptions _originalAlignment;
         private FontStyles _originalFontStyle;
+        private Vector4 _originalMargin;
 
         #endregion
 
@@ -679,6 +682,7 @@ namespace PicoShot.Localization
                     _originalAutoSize = _tmpText.enableAutoSizing;
                     _originalAlignment = _tmpText.alignment;
                     _originalFontStyle = _tmpText.fontStyle;
+                    _originalMargin = _tmpText.margin;
                     _isOriginalStyleCached = true;
                 }
 
@@ -696,6 +700,11 @@ namespace PicoShot.Localization
                     _tmpText.fontStyle = overrideData.FontStyle;
                 else
                     _tmpText.fontStyle = _originalFontStyle;
+
+                if (overrideData.OverrideMargin)
+                    _tmpText.margin = overrideData.Margin;
+                else
+                    _tmpText.margin = _originalMargin;
             }
             else
             {
@@ -704,6 +713,7 @@ namespace PicoShot.Localization
                     _tmpText.enableAutoSizing = _originalAutoSize;
                     _tmpText.alignment = _originalAlignment;
                     _tmpText.fontStyle = _originalFontStyle;
+                    _tmpText.margin = _originalMargin;
                 }
             }
         }
@@ -736,5 +746,9 @@ namespace PicoShot.Localization
 
         public bool OverrideFontStyle;
         public FontStyles FontStyle;
+
+        public bool OverrideMargin;
+        [Margin]
+        public Vector4 Margin;
     }
 }

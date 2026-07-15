@@ -653,25 +653,7 @@ namespace PicoShot.Localization
 
         #endregion
 
-        [ContextMenu("Switch language")]
-        private void ChangeLanguage()
-        {
-            var languages = LocalizationManager.GetAvailableLanguageCodes().OrderBy(l => l).ToList();
-            if (languages.Count == 0) return;
 
-            LocalizationManager.Initialize();
-
-            string current = LocalizationManager.CurrentLanguage;
-            int currentIndex = languages.FindIndex(l => string.Equals(l, current, System.StringComparison.OrdinalIgnoreCase));
-            
-            int nextIndex = (currentIndex + 1) % languages.Count;
-            LocalizationManager.SetLanguage(languages[nextIndex]);
-            
-            if (!Application.isPlaying)
-            {
-                UpdateText();
-            }
-        }
     }
 
     /// <summary>

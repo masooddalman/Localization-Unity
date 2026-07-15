@@ -43,6 +43,32 @@ namespace PicoShot.Localization
             GetWindow<LocalizationEditor>("Language Editor");
         }
 
+        [MenuItem("Tools/Localization/Switch Language")]
+        public static void SwitchLanguage()
+        {
+            var languages = LocalizationManager.GetAvailableLanguageCodes().OrderBy(l => l).ToList();
+            if (languages.Count == 0) return;
+
+            LocalizationManager.Initialize();
+
+            string current = LocalizationManager.CurrentLanguage;
+            int currentIndex = languages.FindIndex(l => string.Equals(l, current, System.StringComparison.OrdinalIgnoreCase));
+            
+            int nextIndex = (currentIndex + 1) % languages.Count;
+            LocalizationManager.SetLanguage(languages[nextIndex]);
+            
+            if (!Application.isPlaying)
+            {
+                var texts = GameObject.FindObjectsOfType<LocalizationTextComponent>(true);
+                foreach (var text in texts)
+                {
+                    text.UpdateText();
+                    EditorUtility.SetDirty(text);
+                }
+                UnityEditor.SceneView.RepaintAll();
+            }
+        }
+
         private void OnEnable()
         {
             _data = new LanguageEditorData();

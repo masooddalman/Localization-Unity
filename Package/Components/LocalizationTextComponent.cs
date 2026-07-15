@@ -146,6 +146,7 @@ namespace PicoShot.Localization
         private Vector2 _lastWrappedRectSize = new(float.NaN, float.NaN);
         private bool _isInitialized;
         private readonly List<Func<string, string>> _textProcessors = new();
+        private object[] _dynamicFormatArgs;
 
         [Header("Style Overrides")]
         [SerializeField]
@@ -240,6 +241,16 @@ namespace PicoShot.Localization
         #endregion
 
         #region Public Methods
+
+        /// <summary>
+        /// Updates the format arguments dynamically and refreshes the text.
+        /// These arguments will override the Inspector formatParameters.
+        /// </summary>
+        public void UpdateFormatArgs(params object[] args)
+        {
+            _dynamicFormatArgs = args;
+            UpdateText();
+        }
 
         /// <summary>
         /// Updates the text component with the current translation.
@@ -631,6 +642,11 @@ namespace PicoShot.Localization
                 return LocalizationManager.GetArrayText(translationKey, arrayIndex);
             }
 
+            if (_dynamicFormatArgs != null && _dynamicFormatArgs.Length > 0)
+            {
+                return LocalizationManager.GetText(translationKey, _dynamicFormatArgs);
+            }
+
             if (formatParameters != null && formatParameters.Length > 0)
             {
                 return LocalizationManager.GetText(translationKey, formatParameters);
@@ -643,6 +659,9 @@ namespace PicoShot.Localization
         {
             if (arrayIndex >= 0)
                 return LocalizationManager.GetLogicalArrayText(translationKey, arrayIndex);
+
+            if (_dynamicFormatArgs != null && _dynamicFormatArgs.Length > 0)
+                return LocalizationManager.GetLogicalText(translationKey, _dynamicFormatArgs);
 
             if (formatParameters != null && formatParameters.Length > 0)
                 return LocalizationManager.GetLogicalText(translationKey, formatParameters);

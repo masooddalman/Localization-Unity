@@ -145,6 +145,15 @@ namespace PicoShot.Localization
         private bool _isInitialized;
         private readonly List<Func<string, string>> _textProcessors = new();
 
+        [Header("Style Overrides")]
+        [SerializeField]
+        public List<LanguageStyleOverride> StyleOverrides = new List<LanguageStyleOverride>();
+
+        private bool _isOriginalStyleCached;
+        private bool _originalAutoSize;
+        private TextAlignmentOptions _originalAlignment;
+        private FontStyles _originalFontStyle;
+
         #endregion
 
         #region Unity Lifecycle
@@ -251,6 +260,7 @@ namespace PicoShot.Localization
                 {
                     UpdateTextComponent();
                 }
+                ApplyStyleOverrides();
             }
             catch (Exception ex)
             {
@@ -653,7 +663,50 @@ namespace PicoShot.Localization
 
         #endregion
 
+        private void ApplyStyleOverrides()
+        {
+            if (_tmpText == null) return;
 
+            string currentLang = LocalizationManager.CurrentLanguage;
+            if (string.IsNullOrEmpty(currentLang)) return;
+
+            var overrideData = StyleOverrides.FirstOrDefault(o => string.Equals(o.LanguageCode, currentLang, StringComparison.OrdinalIgnoreCase));
+
+            if (!string.IsNullOrEmpty(overrideData.LanguageCode))
+            {
+                if (!_isOriginalStyleCached)
+                {
+                    _originalAutoSize = _tmpText.enableAutoSizing;
+                    _originalAlignment = _tmpText.alignment;
+                    _originalFontStyle = _tmpText.fontStyle;
+                    _isOriginalStyleCached = true;
+                }
+
+                if (overrideData.OverrideAutoSize)
+                    _tmpText.enableAutoSizing = overrideData.AutoSize;
+                else
+                    _tmpText.enableAutoSizing = _originalAutoSize;
+
+                if (overrideData.OverrideAlignment)
+                    _tmpText.alignment = overrideData.Alignment;
+                else
+                    _tmpText.alignment = _originalAlignment;
+
+                if (overrideData.OverrideFontStyle)
+                    _tmpText.fontStyle = overrideData.FontStyle;
+                else
+                    _tmpText.fontStyle = _originalFontStyle;
+            }
+            else
+            {
+                if (_isOriginalStyleCached)
+                {
+                    _tmpText.enableAutoSizing = _originalAutoSize;
+                    _tmpText.alignment = _originalAlignment;
+                    _tmpText.fontStyle = _originalFontStyle;
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -667,5 +720,21 @@ namespace PicoShot.Localization
         LegacyText,
         LegacyDropdown,
         TextMesh
+    }
+
+    [Serializable]
+    public struct LanguageStyleOverride
+    {
+        [Tooltip("The language code (e.g. 'fa', 'en') for which to apply these overrides.")]
+        public string LanguageCode;
+
+        public bool OverrideAutoSize;
+        public bool AutoSize;
+
+        public bool OverrideAlignment;
+        public TextAlignmentOptions Alignment;
+
+        public bool OverrideFontStyle;
+        public FontStyles FontStyle;
     }
 }

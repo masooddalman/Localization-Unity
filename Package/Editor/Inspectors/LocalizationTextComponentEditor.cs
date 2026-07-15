@@ -15,6 +15,7 @@ namespace PicoShot.Localization.Editor.Inspectors
         private SerializedProperty _arraySizeLimitProp;
         private SerializedProperty _formatParametersProp;
         private SerializedProperty _onTextUpdatedProp;
+        private SerializedProperty _styleOverridesProp;
 
         private string _selectedView = "All Keys";
         private List<string> _availableViews = new List<string>();
@@ -33,6 +34,7 @@ namespace PicoShot.Localization.Editor.Inspectors
             _arraySizeLimitProp = serializedObject.FindProperty("arraySizeLimit");
             _formatParametersProp = serializedObject.FindProperty("formatParameters");
             _onTextUpdatedProp = serializedObject.FindProperty("onTextUpdated");
+            _styleOverridesProp = serializedObject.FindProperty("StyleOverrides");
             
             RefreshData();
             SyncSelectedViewWithKey();
@@ -216,6 +218,9 @@ namespace PicoShot.Localization.Editor.Inspectors
             
             EditorGUILayout.Space();
             EditorGUILayout.PropertyField(_onTextUpdatedProp);
+
+            EditorGUILayout.Space();
+            EditorGUILayout.PropertyField(_styleOverridesProp, true);
 
             serializedObject.ApplyModifiedProperties();
         }

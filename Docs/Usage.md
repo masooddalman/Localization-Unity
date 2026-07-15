@@ -826,7 +826,7 @@ When enabled, the `RtlTextHandler` uses a smart token-based algorithm to:
 
 To display Arabic and Persian texts correctly in TextMeshPro, you need to generate a Font Asset that includes all the necessary characters (Base letters, Presentation Forms, and Diacritics).
 
-We have provided a ready-to-use Unicode range file(s) at `Package/Assets`.
+We have provided a ready-to-use Unicode range file(s) at `@/Assets`.
 
 **How to generate the font:**
 

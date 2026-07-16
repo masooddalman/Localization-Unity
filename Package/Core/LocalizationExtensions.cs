@@ -21,10 +21,12 @@ namespace PicoShot.Localization
             if (textComponent == null) return;
             var loc = textComponent.GetComponent<LocalizationTextComponent>();
             if (loc == null) loc = textComponent.gameObject.AddComponent<LocalizationTextComponent>();
-            
-            loc.TranslationKey = key;
             if (args != null && args.Length > 0)
                 loc.UpdateFormatArgs(args);
+            else
+                loc.UpdateFormatArgs(null);
+
+            loc.TranslationKey = key;
         }
 
         /// <summary>
@@ -36,10 +38,12 @@ namespace PicoShot.Localization
             if (textComponent == null) return;
             var loc = textComponent.GetComponent<LocalizationTextComponent>();
             if (loc == null) loc = textComponent.gameObject.AddComponent<LocalizationTextComponent>();
-            
-            loc.TranslationKey = key;
             if (args != null && args.Length > 0)
                 loc.UpdateFormatArgs(args);
+            else
+                loc.UpdateFormatArgs(null);
+
+            loc.TranslationKey = key;
         }
     }
 }

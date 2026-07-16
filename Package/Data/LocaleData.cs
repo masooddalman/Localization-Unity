@@ -6,7 +6,8 @@ namespace PicoShot.Localization.Data
 {
     /// <summary>
     /// Represents a single locale file containing translations for one language.
-    /// This is the runtime format used by BLOC files.
+    /// This is the runtime format used by CSV files.
+    /// It must be serialized differently in Unity depending on where it goes.
     /// 
     /// Key: Translation key (e.g., "ui.play_button")
     /// Value: String or List&lt;string&gt; for arrays

@@ -39,7 +39,7 @@ namespace PicoShot.Localization
         #region Configuration
 
         public const string LanguagesDirectory = "Locales";
-        public const string FileExtension = ".bloc";
+        public const string FileExtension = ".csv";
 
         /// <summary>
         /// Gets the path to the locales directory.
@@ -81,16 +81,6 @@ namespace PicoShot.Localization
         /// Gets the default language from config.
         /// </summary>
         public static string DefaultLanguage => LocalizationConfigProvider.Config.DefaultLanguage;
-
-        /// <summary>
-        /// Gets whether anti-tamper mode is enabled.
-        /// </summary>
-        public static bool IsAntiTamperEnabled => LocalizationConfigProvider.Config.IsAntiTamperEnabled;
-
-        /// <summary>
-        /// Gets the selected languages from config (used when protection is enabled).
-        /// </summary>
-        public static IReadOnlyList<string> SelectedLanguages => LocalizationConfigProvider.Config.SelectedLanguages;
 
         private static bool IsCloneEditor()
         {
@@ -298,47 +288,12 @@ namespace PicoShot.Localization
                 foreach (var file in blocFiles)
                 {
                     string fileName = Path.GetFileName(file);
-
-                    if (!LocaleBlocSerializer.ValidateFile(file, out _, out string languageCode) || string.IsNullOrEmpty(languageCode))
-                    {
-                        Debug.LogWarning($"[LocalizationManager] Skipping invalid/corrupted file: {fileName}");
-                        continue;
-                    }
+                    string languageCode = Path.GetFileNameWithoutExtension(file);
 
                     if (!LanguageDefinitions.IsValidLanguage(languageCode))
                     {
                         Debug.LogError($"[LocalizationManager] Rejecting file '{fileName}' - unsupported language code: '{languageCode}'");
                         OnLanguageLoadError?.Invoke($"Unsupported language: {languageCode}");
-                        continue;
-                    }
-
-                    if (config.ProtectionMode == ProtectionMode.SelectionOnly ||
-                        config.ProtectionMode == ProtectionMode.Both)
-                    {
-                        if (!config.SelectedLanguages.Contains(languageCode))
-                        {
-                            Debug.LogWarning($"[LocalizationManager] Skipping unauthorized language: {languageCode} ({fileName})");
-                            continue;
-                        }
-                    }
-
-                    if (IsAntiTamperEnabled)
-                    {
-                        if (!VerifyFileHash(file, fileName, config))
-                        {
-                            Debug.LogError($"[LocalizationManager] Hash verification failed for: {languageCode} ({fileName})");
-                            OnLanguageLoadError?.Invoke($"File tampering detected: {languageCode}");
-                            continue;
-                        }
-                    }
-
-                    string fileNameLanguage = Path.GetFileNameWithoutExtension(file);
-                    if (!string.Equals(fileNameLanguage, languageCode, StringComparison.OrdinalIgnoreCase))
-                    {
-                        Debug.LogError($"[LocalizationManager] Rejecting file '{fileName}' - filename mismatch: " +
-                            $"expected '{languageCode}{FileExtension}' but found '{fileName}'. " +
-                            $"Filename must match the language code stored in the file header.");
-                        OnLanguageLoadError?.Invoke($"Invalid filename: {fileName}");
                         continue;
                     }
 
@@ -480,7 +435,7 @@ namespace PicoShot.Localization
                 throw new FileNotFoundException($"Locale file not found for language '{languageCode}'", filePath);
             }
 
-            var localeData = LocaleBlocSerializer.LoadFile(filePath, out var info);
+            var localeData = LocaleCsvSerializer.LoadFile(filePath, out var _);
 
             if (localeData?.Translations == null)
             {
@@ -493,29 +448,6 @@ namespace PicoShot.Localization
         private static string GetLocaleFilePath(string languageCode)
         {
             return Path.Combine(LanguagesPath, $"{languageCode}{FileExtension}");
-        }
-
-        private static bool VerifyFileHash(string filePath, string fileName, LocalizationConfig config)
-        {
-            if (!config.TryGetFileHash(fileName, out string expectedHash))
-            {
-                Debug.LogWarning($"[LocalizationManager] No hash stored for file: {fileName}");
-                return false;
-            }
-
-            string actualHash = CalculateFileHash(filePath);
-            return string.Equals(expectedHash, actualHash, StringComparison.OrdinalIgnoreCase);
-        }
-
-        /// <summary>
-        /// Calculates SHA256 hash of a file.
-        /// </summary>
-        public static string CalculateFileHash(string filePath)
-        {
-            using var sha256 = SHA256.Create();
-            using var stream = File.OpenRead(filePath);
-            byte[] hash = sha256.ComputeHash(stream);
-            return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
         }
 
         /// <summary>

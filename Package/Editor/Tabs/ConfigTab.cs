@@ -86,8 +86,6 @@ namespace PicoShot.Localization.Editor.Tabs
             DrawDefaultLanguageSection(config);
             DrawKeyViewSettings();
             DrawTextProcessingSettings(config);
-            DrawCompressionSettings(config);
-            DrawProtectionSettings(config);
         }
 
         private void DrawTranslationTab()
@@ -164,75 +162,7 @@ namespace PicoShot.Localization.Editor.Tabs
             EditorGUILayout.Space();
         }
 
-        private void DrawCompressionSettings(LocalizationConfig config)
-        {
-            EditorGUILayout.LabelField("File Compression", EditorStyles.boldLabel);
 
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("Compression:", GUILayout.Width(120));
-            var newMode = (CompressionMode)EditorGUILayout.EnumPopup(config.CompressionMode);
-            if (newMode != config.CompressionMode)
-            {
-                config.SetCompressionMode(newMode);
-                LocalizationConfigProvider.SaveConfig();
-                GUI.changed = true;
-            }
-            EditorGUILayout.EndHorizontal();
-
-            string compressionHelp = config.CompressionMode switch
-            {
-                CompressionMode.Disabled => "No compression. Fastest save/load but largest file sizes.",
-                CompressionMode.Fastest => "Fast compression. Good for development with quick iteration times.",
-                CompressionMode.Optimal => "Best compression ratio. Smaller files but slower saves. Recommended for builds.",
-                _ => ""
-            };
-            EditorGUILayout.HelpBox(compressionHelp, MessageType.None);
-
-            EditorGUILayout.Space();
-        }
-
-        private void DrawProtectionSettings(LocalizationConfig config)
-        {
-            EditorGUILayout.LabelField("Protection Settings (experimental)", EditorStyles.boldLabel);
-
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("Protection Mode:", GUILayout.Width(120));
-            var newMode = (ProtectionMode)EditorGUILayout.EnumPopup(config.ProtectionMode);
-            if (newMode != config.ProtectionMode)
-            {
-                config.SetProtectionMode(newMode);
-                LocalizationConfigProvider.SaveConfig();
-                GUI.changed = true;
-            }
-            EditorGUILayout.EndHorizontal();
-
-            if (config.IsAntiTamperEnabled)
-            {
-                EditorGUILayout.BeginHorizontal();
-                EditorGUILayout.LabelField("", GUILayout.Width(120));
-                if (GUILayout.Button("Sync File Hashes", GUILayout.Height(25)))
-                {
-                    SyncFileHashes(config);
-                }
-                EditorGUILayout.EndHorizontal();
-
-                DrawHelpBox(
-                    "Anti-Tamper: File hashes are verified at runtime. " +
-                    "Click 'Sync File Hashes' after modifying language files.");
-            }
-
-            string protectionHelp = config.ProtectionMode switch
-            {
-                ProtectionMode.Disabled => "Protection is disabled. All language files can be loaded.",
-                ProtectionMode.SelectionOnly => "Only selected languages can be loaded at runtime.",
-                ProtectionMode.AntiTamper => "Anti-tamper protection with hash verification.",
-                ProtectionMode.Both => "Full protection: Only selected languages can be loaded AND file hashes are verified.",
-                _ => ""
-            };
-            DrawHelpBox(protectionHelp);
-
-            EditorGUILayout.Space();
-        }
 
         private void DrawTranslationSettings()
         {
@@ -472,49 +402,7 @@ namespace PicoShot.Localization.Editor.Tabs
             menu.DropDown(dropdownRect);
         }
 
-        private void SyncFileHashes(LocalizationConfig config)
-        {
-            try
-            {
-                if (!Directory.Exists(LocalizationManager.LanguagesPath))
-                {
-                    EditorUtility.DisplayDialog("Error", "Languages directory not found.", "OK");
-                    return;
-                }
 
-                var files = Directory.GetFiles(LocalizationManager.LanguagesPath, "*.bloc");
-                int syncedCount = 0;
-                int removedCount = 0;
-
-                var existingHashes = new HashSet<string>(config.GetFileHashes().Select(h => h.fileName));
-
-                foreach (var file in files)
-                {
-                    string fileName = Path.GetFileName(file);
-                    string hash = LocalizationManager.CalculateFileHash(file);
-                    config.SetFileHash(fileName, hash);
-                    syncedCount++;
-                    existingHashes.Remove(fileName);
-                }
-
-                foreach (var oldFile in existingHashes)
-                {
-                    config.RemoveFileHash(oldFile);
-                    removedCount++;
-                }
-
-                LocalizationConfigProvider.SaveConfig();
-
-                EditorUtility.DisplayDialog("Hashes Synced",
-                    $"Successfully synced {syncedCount} file hashes.\n" +
-                    $"Removed {removedCount} outdated hashes.", "OK");
-            }
-            catch (System.Exception ex)
-            {
-                EditorUtility.DisplayDialog("Error", $"Failed to sync hashes: {ex.Message}", "OK");
-                Debug.LogError($"[LocalizationEditor] Hash sync failed: {ex}");
-            }
-        }
 
         private static void OpenLanguagesFolder()
         {

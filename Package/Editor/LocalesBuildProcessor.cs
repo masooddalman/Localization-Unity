@@ -90,7 +90,7 @@ namespace PicoShot.Localization.Editor
 
                 Directory.CreateDirectory(targetPath);
 
-                var files = Directory.GetFiles(sourcePath, "*.bloc", SearchOption.AllDirectories);
+                var files = Directory.GetFiles(sourcePath, "*.csv", SearchOption.AllDirectories);
                 foreach (var file in files)
                 {
                     string relativePath = file.Substring(sourcePath.Length + 1);

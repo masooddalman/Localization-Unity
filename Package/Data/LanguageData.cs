@@ -5,8 +5,8 @@ namespace PicoShot.Localization.Data
 {
     /// <summary>
     /// Multi-language data structure for editor use.
-    /// This is used by the editor to manage translations across multiple languages.
-    /// At runtime, each language is stored separately in LocaleData/BLOC files.
+    /// Represents the full localization data inside the Editor.
+    /// At runtime, each language is stored separately in LocaleData/CSV files.
     /// </summary>
     [Serializable]
     public sealed class LanguageData

@@ -161,9 +161,6 @@ namespace PicoShot.Localization.Editor.Tabs
         {
             if (Data.AddLanguage(language))
             {
-                var config = LocalizationConfigProvider.Config;
-                config.AddSelectedLanguage(language);
-                LocalizationConfigProvider.SaveConfig();
                 Editor.Repaint();
             }
         }
@@ -175,10 +172,6 @@ namespace PicoShot.Localization.Editor.Tabs
                 string filePath = LocalizationManager.GetLanguageFilePath(language);
                 if (System.IO.File.Exists(filePath))
                     System.IO.File.Delete(filePath);
-
-                var config = LocalizationConfigProvider.Config;
-                config.RemoveSelectedLanguage(language);
-                LocalizationConfigProvider.SaveConfig();
 
                 Editor.Repaint();
             }

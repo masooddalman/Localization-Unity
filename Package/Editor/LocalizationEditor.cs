@@ -9,7 +9,6 @@ using PicoShot.Localization.Config;
 using PicoShot.Localization.Data;
 using PicoShot.Localization.Editor.Data;
 using PicoShot.Localization.Editor.Tabs;
-using PicoShot.Localization.Bloc;
 
 namespace PicoShot.Localization
 {
@@ -74,17 +73,7 @@ namespace PicoShot.Localization
             _data = new LanguageEditorData();
             InitializeTabs();
 
-            LoadLanguages(out var oldVersions);
-
-            if (oldVersions?.Length > 0)
-            {
-                if (EditorUtility.DisplayDialog("Bloc versions is old",
-                    $"These language files `{string.Join(", ", oldVersions)}` use an older version of the bloc format. Would you like to upgrade these files to the newer version?",
-                    "Upgrade", "Use old version"))
-                {
-                    UpgradeLocaleFiles();
-                }
-            }
+            LoadLanguages();
 
             CompilationPipeline.compilationStarted += OnBeforeCompile;
             EditorApplication.playModeStateChanged += OnPlayModeChanged;
@@ -264,9 +253,9 @@ namespace PicoShot.Localization
         #region Data Management
 
         /// <summary>
-        /// Loads all language data from BLOC files.
+        /// Loads all language data from CSV files.
         /// </summary>
-        private void LoadLanguages(out string[] oldVersions)
+        private void LoadLanguages()
         {
             try
             {
@@ -277,50 +266,27 @@ namespace PicoShot.Localization
                 if (!Directory.Exists(LocalizationManager.LanguagesPath))
                 {
                     Debug.Log("[LocalizationEditor] Languages directory not found. Creating new data.");
-                    oldVersions = Array.Empty<string>();
                     return;
                 }
 
-                var blocFiles = Directory.GetFiles(LocalizationManager.LanguagesPath, "*.bloc", SearchOption.TopDirectoryOnly);
-                oldVersions = new string[blocFiles.Length];
-                int oldVersionPtr = 0;
+                var csvFiles = Directory.GetFiles(LocalizationManager.LanguagesPath, "*.csv", SearchOption.TopDirectoryOnly);
 
-                foreach (var file in blocFiles)
+                foreach (var file in csvFiles)
                 {
                     try
                     {
-                        using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read);
+                        var localeData = LocaleCsvSerializer.LoadFile(file, out var langCode);
 
-                        if (!BlocFormat.Validate(stream, out var version, out var langCode, out var exception) || string.IsNullOrEmpty(langCode))
+                        if (string.IsNullOrEmpty(langCode))
                         {
-                            Debug.LogWarning($"[LocalizationEditor] Skipping invalid/corrupted file: {Path.GetFileName(file)}");
-
-                            if (exception != null)
-                                Debug.LogError($"BLOC validation error: {exception}");
-
                             continue;
                         }
-                        stream.Position = 0;
 
                         if (!LanguageDefinitions.IsValidLanguage(langCode))
                         {
                             Debug.LogError($"[LocalizationEditor] Rejecting file '{Path.GetFileName(file)}' - unsupported language code: '{langCode}'");
                             continue;
                         }
-
-                        string fileNameLanguage = Path.GetFileNameWithoutExtension(file);
-                        if (!string.Equals(fileNameLanguage, langCode, StringComparison.OrdinalIgnoreCase))
-                        {
-                            Debug.LogError($"[LocalizationEditor] Rejecting file '{Path.GetFileName(file)}' - filename mismatch: " +
-                                $"expected '{langCode}.bloc' but filename is '{Path.GetFileName(file)}'. " +
-                                $"Filename must match the language code stored in the file header.");
-                            continue;
-                        }
-
-                        var localeData = BlocFormat.Deserialize(stream, out var info);
-
-                        if (info.Version < BlocFormat.LatestVersion)
-                            oldVersions[oldVersionPtr++] = info.LanguageCode;
 
                         if (!_data.LanguageCodes.Contains(langCode))
                         {
@@ -351,92 +317,13 @@ namespace PicoShot.Localization
                     }
                 }
 
-                Array.Resize(ref oldVersions, oldVersionPtr);
                 SyncMissingLanguageEntries();
-                SyncProtectionOnLoad();
             }
             catch (Exception ex)
             {
-                oldVersions = Array.Empty<string>();
                 Debug.LogError($"[LocalizationEditor] Error loading language data: {ex}");
                 _data.Reset();
             }
-        }
-
-        /// <summary>
-        /// Upgrades all BLOC language files.
-        /// </summary>
-        private void UpgradeLocaleFiles()
-        {
-            string defaultLang = LocalizationConfigProvider.Config.DefaultLanguage;
-
-            if (!Directory.Exists(LocalizationManager.LanguagesPath))
-            {
-                Debug.Log("[LocalizationEditor] Languages directory not found. Creating new data.");
-                return;
-            }
-
-            var blocFiles = Directory.GetFiles(LocalizationManager.LanguagesPath, "*.bloc", SearchOption.TopDirectoryOnly);
-            foreach (var file in blocFiles)
-            {
-                string tempFile = $"{file}.tmp";
-                try
-                {
-                    using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read);
-
-                    if (!BlocFormat.Validate(stream, out var version, out var langCode, out var exception) || string.IsNullOrEmpty(langCode))
-                    {
-                        Debug.LogWarning($"[LocalizationEditor] Skipping invalid/corrupted file: {Path.GetFileName(file)}");
-
-                        if (exception != null)
-                            Debug.Log($"BLOC validation error: {exception}");
-
-                        continue;
-                    }
-                    stream.Position = 0;
-
-                    if (!LanguageDefinitions.IsValidLanguage(langCode))
-                    {
-                        Debug.LogError($"[LocalizationEditor] Rejecting file '{Path.GetFileName(file)}' - unsupported language code: '{langCode}'");
-                        continue;
-                    }
-
-                    string fileNameLanguage = Path.GetFileNameWithoutExtension(file);
-                    if (!string.Equals(fileNameLanguage, langCode, StringComparison.OrdinalIgnoreCase))
-                    {
-                        Debug.LogError($"[LocalizationEditor] Rejecting file '{Path.GetFileName(file)}' - filename mismatch: " +
-                            $"expected '{langCode}.bloc' but filename is '{Path.GetFileName(file)}'. " +
-                            $"Filename must match the language code stored in the file header.");
-                        continue;
-                    }
-
-                    if (version >= BlocFormat.LatestVersion)
-                        continue;
-
-                    using (var destStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None))
-                    {
-                        BlocFormat.Upgrade(stream, destStream, BlocFormat.LatestVersion, LocaleBlocSerializer.CompressionLevel);
-
-                        destStream.Flush(true);
-                    }
-
-                    if (File.Exists(file))
-                        File.Replace(tempFile, file, $"{file}.bak");
-                    else
-                        File.Move(tempFile, file);
-
-                    Debug.Log($"[LocalizationEditor] Locale file upgraded '{file}'");
-                }
-                catch (Exception ex)
-                {
-                    if (File.Exists(tempFile))
-                        File.Delete(tempFile);
-
-                    Debug.LogError($"[LocalizationEditor] Error upgrading file '{file}': {ex}");
-                }
-            }
-
-            LocalizationManager.DeleteJunkFiles();
         }
 
         /// <summary>
@@ -465,39 +352,13 @@ namespace PicoShot.Localization
                 }
             }
         }
-
         /// <summary>
-        /// Syncs protection settings with loaded languages.
-        /// </summary>
-        private void SyncProtectionOnLoad()
-        {
-            var config = LocalizationConfigProvider.Config;
-            bool changed = false;
-
-            foreach (var lang in _data.LanguageCodes)
-            {
-                if (!config.SelectedLanguages.Contains(lang))
-                {
-                    config.AddSelectedLanguage(lang);
-                    changed = true;
-                }
-            }
-
-            if (changed)
-            {
-                LocalizationConfigProvider.SaveConfig();
-            }
-        }
-
-        /// <summary>
-        /// Saves all language data to BLOC files.
+        /// Saves all language data to CSV files.
         /// </summary>
         public void SaveLanguages()
         {
             try
             {
-                ApplyCompressionSettings();
-
                 if (!Directory.Exists(LocalizationManager.LanguagesPath))
                 {
                     Directory.CreateDirectory(LocalizationManager.LanguagesPath);
@@ -509,7 +370,7 @@ namespace PicoShot.Localization
                 {
                     var localeData = new LocaleData
                     {
-                        Version = BlocFormat.LatestVersion,
+                        Version = 1,
                         LanguageCode = lang,
                         Timestamp = timestamp,
                         Translations = new Dictionary<string, object>(),
@@ -524,11 +385,9 @@ namespace PicoShot.Localization
                     }
 
                     string filePath = LocalizationManager.GetLanguageFilePath(lang);
-                    LocaleBlocSerializer.SaveFile(filePath, localeData);
+                    LocaleCsvSerializer.SaveFile(filePath, localeData);
                 }
 
-                var config = LocalizationConfigProvider.Config;
-                config.SetSelectedLanguages(new List<string>(_data.LanguageCodes));
                 LocalizationConfigProvider.SaveConfig();
 
                 _data.HasUnsavedChanges = false;
@@ -545,21 +404,6 @@ namespace PicoShot.Localization
                 EditorUtility.DisplayDialog("Error", $"Failed to save language data: {ex.Message}", "OK");
                 Debug.LogError($"[LocalizationEditor] Error saving language data: {ex}");
             }
-        }
-
-        /// <summary>
-        /// Applies compression settings from config to the serializer.
-        /// </summary>
-        private static void ApplyCompressionSettings()
-        {
-            var config = LocalizationConfigProvider.Config;
-            LocaleBlocSerializer.CompressionLevel = config.CompressionMode switch
-            {
-                CompressionMode.Disabled => System.IO.Compression.CompressionLevel.NoCompression,
-                CompressionMode.Fastest => System.IO.Compression.CompressionLevel.Fastest,
-                CompressionMode.Optimal => System.IO.Compression.CompressionLevel.Optimal,
-                _ => System.IO.Compression.CompressionLevel.Optimal
-            };
         }
 
         /// <summary>
@@ -599,14 +443,13 @@ namespace PicoShot.Localization
 
             if (Directory.Exists(LocalizationManager.LanguagesPath))
             {
-                var files = Directory.GetFiles(LocalizationManager.LanguagesPath, "*.bloc");
+                var files = Directory.GetFiles(LocalizationManager.LanguagesPath, "*.csv");
                 foreach (var file in files)
                 {
                     File.Delete(file);
                 }
             }
 
-            config.SetSelectedLanguages(new List<string> { defaultLang });
             LocalizationConfigProvider.SaveConfig();
 
             SaveLanguages();

@@ -87,19 +87,22 @@ namespace PicoShot.Localization.Editor.Tabs
                 GUI.FocusControl(null);
             }
 
-            if (!string.IsNullOrEmpty(Data.SelectedView))
+            if (GUILayout.Button("Export JSON", GUILayout.Width(85)))
             {
-                if (GUILayout.Button("Export JSON", GUILayout.Width(85)))
-                {
+                if (string.IsNullOrEmpty(Data.SelectedView))
+                    _jsonService.ExportToJson();
+                else
                     _jsonService.ExportViewToJson(Data.SelectedView);
-                    GUIUtility.ExitGUI();
-                }
+                GUIUtility.ExitGUI();
+            }
 
-                if (GUILayout.Button("Import JSON", GUILayout.Width(85)))
-                {
+            if (GUILayout.Button("Import JSON", GUILayout.Width(85)))
+            {
+                if (string.IsNullOrEmpty(Data.SelectedView))
+                    _jsonService.ImportFromJson();
+                else
                     _jsonService.ImportViewFromJson(Data.SelectedView);
-                    GUIUtility.ExitGUI();
-                }
+                GUIUtility.ExitGUI();
             }
             EditorGUILayout.EndHorizontal();
 

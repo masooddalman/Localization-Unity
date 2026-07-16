@@ -248,6 +248,41 @@ namespace PicoShot.Localization.Editor.Services
                     return;
                 }
 
+                string fileName = System.IO.Path.GetFileNameWithoutExtension(path);
+                string prefix = "";
+                
+                if (fileName.StartsWith("View_", StringComparison.OrdinalIgnoreCase))
+                {
+                    int nextUnderscore = fileName.IndexOf('_', 5);
+                    if (nextUnderscore > 5)
+                        prefix = fileName.Substring(5, nextUnderscore - 5) + _data.CurrentViewDelimiter;
+                    else
+                        prefix = fileName.Substring(5) + _data.CurrentViewDelimiter;
+                }
+                else if (!fileName.StartsWith("Localization_Export", StringComparison.OrdinalIgnoreCase))
+                {
+                    bool hasDelimiters = importData.Keys.Any(k => k.Contains(_data.CurrentViewDelimiter));
+                    if (!hasDelimiters)
+                    {
+                        prefix = fileName + _data.CurrentViewDelimiter;
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(prefix))
+                {
+                    string viewName = prefix.TrimEnd(_data.CurrentViewDelimiter);
+                    bool confirm = EditorUtility.DisplayDialog("Import Table", 
+                        $"It looks like this file belongs to the table '{viewName}' based on its filename.\n\n" +
+                        $"Do you want to import these keys into the '{viewName}' table?\n\n" +
+                        $"(If No, keys will be imported exactly as they appear in the file)",
+                        "Yes, use table", "No, keep exact keys");
+                    
+                    if (!confirm)
+                    {
+                        prefix = "";
+                    }
+                }
+
                 int totalKeys = importData.Count;
                 int totalLangs = importData.Values.SelectMany(d => d.Keys).Distinct().Count();
 
@@ -276,6 +311,10 @@ namespace PicoShot.Localization.Editor.Services
                 foreach (var kvp in importData)
                 {
                     string importKey = kvp.Key.Trim();
+                    if (!string.IsNullOrEmpty(prefix) && !importKey.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        importKey = prefix + importKey;
+                    }
                     var langData = kvp.Value;
 
                     string key = _data.Keys.FirstOrDefault(k => k.Equals(importKey, StringComparison.OrdinalIgnoreCase)) ?? importKey;

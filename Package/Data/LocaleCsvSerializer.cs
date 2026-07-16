@@ -15,6 +15,23 @@ namespace PicoShot.Localization.Data
                 return data;
 
             using var reader = new StreamReader(path, Encoding.UTF8);
+            return LoadTranslationsFromReader(reader);
+        }
+
+        public static LanguageData LoadTranslationsFromString(string csvContent)
+        {
+            var data = new LanguageData();
+            if (string.IsNullOrWhiteSpace(csvContent))
+                return data;
+
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(csvContent));
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            return LoadTranslationsFromReader(reader);
+        }
+
+        private static LanguageData LoadTranslationsFromReader(StreamReader reader)
+        {
+            var data = new LanguageData();
 
             // Read header
             if (reader.EndOfStream)

@@ -48,31 +48,10 @@ namespace PicoShot.Localization
         {
             get
             {
-#if UNITY_STANDALONE || UNITY_EDITOR
-                string projectPath = Path.GetDirectoryName(Application.dataPath);
-                if (projectPath != null)
-                {
-                    string normalizedPath = projectPath.Replace('\\', '/');
-                    int searchIndex = 0;
-                    while (true)
-                    {
-                        int libraryIndex = normalizedPath.IndexOf("/Library/", searchIndex, StringComparison.OrdinalIgnoreCase);
-                        if (libraryIndex < 0)
-                            break;
-
-                        string candidatePath = projectPath.Substring(0, libraryIndex);
-                        if (Directory.Exists(Path.Combine(candidatePath, "Assets")) &&
-                            Directory.Exists(Path.Combine(candidatePath, "ProjectSettings")))
-                        {
-                            projectPath = candidatePath;
-                            break;
-                        }
-                        searchIndex = libraryIndex + 1;
-                    }
-                }
-                return Path.Combine(projectPath ?? string.Empty, LanguagesDirectory);
+#if UNITY_EDITOR
+                return Path.Combine(Application.dataPath, "Resources", LanguagesDirectory);
 #else
-                return Path.Combine(Application.streamingAssetsPath, LanguagesDirectory);
+                return string.Empty;
 #endif
             }
         }
@@ -236,12 +215,11 @@ namespace PicoShot.Localization
 
         public static void DeleteJunkFiles()
         {
+#if UNITY_EDITOR
             try
             {
                 if (!Directory.Exists(LanguagesPath))
                     return;
-
-                File.GetAttributes(LanguagesPath);
 
                 var junkExtensions = new[] { ".bak", ".tmp" };
 
@@ -263,6 +241,7 @@ namespace PicoShot.Localization
             {
                 Debug.LogWarning($"[LocalizationManager] Failed to delete junk files: {ex.Message}");
             }
+#endif
         }
 
         private static void ScanAvailableLanguages()
@@ -272,17 +251,17 @@ namespace PicoShot.Localization
 
             try
             {
-                string filePath = Path.Combine(LanguagesPath, "translations.csv");
+                var textAsset = Resources.Load<TextAsset>($"{LanguagesDirectory}/translations");
 
-                if (!File.Exists(filePath))
+                if (textAsset == null)
                 {
 #if !UNITY_EDITOR
-                    Debug.LogWarning($"[LocalizationManager] translations.csv not found: {filePath}");
+                    Debug.LogWarning($"[LocalizationManager] translations.csv not found in Resources/{LanguagesDirectory}");
 #endif
                     return;
                 }
 
-                var data = LocaleCsvSerializer.LoadTranslations(filePath);
+                var data = LocaleCsvSerializer.LoadTranslationsFromString(textAsset.text);
                 var languages = data.GetAllLanguageCodes();
 
                 foreach (var lang in languages)
@@ -420,14 +399,14 @@ namespace PicoShot.Localization
 
         private static LanguageDictionary LoadLocaleFile(string languageCode)
         {
-            string filePath = Path.Combine(LanguagesPath, "translations.csv");
+            var textAsset = Resources.Load<TextAsset>($"{LanguagesDirectory}/translations");
 
-            if (!File.Exists(filePath))
+            if (textAsset == null)
             {
-                throw new FileNotFoundException($"translations.csv file not found at", filePath);
+                throw new FileNotFoundException($"translations.csv file not found in Resources/{LanguagesDirectory}");
             }
 
-            var data = LocaleCsvSerializer.LoadTranslations(filePath);
+            var data = LocaleCsvSerializer.LoadTranslationsFromString(textAsset.text);
             var langDict = new Dictionary<string, object>();
 
             foreach (var kvp in data.Translations)
@@ -764,7 +743,7 @@ namespace PicoShot.Localization
         /// </summary>
         public static string GetLanguageFilePath(string languageCode)
         {
-            return System.IO.Path.Combine(LanguagesPath, "translations.csv");
+            return Path.Combine(LanguagesPath, "translations.csv");
         }
 
         /// <summary>

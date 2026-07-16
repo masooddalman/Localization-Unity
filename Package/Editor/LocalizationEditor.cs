@@ -263,58 +263,50 @@ namespace PicoShot.Localization
 
                 _data.Reset();
 
-                if (!Directory.Exists(LocalizationManager.LanguagesPath))
+                string filePath = Path.Combine(LocalizationManager.LanguagesPath, "translations.csv");
+
+                if (!File.Exists(filePath))
                 {
-                    Debug.Log("[LocalizationEditor] Languages directory not found. Creating new data.");
+                    Debug.Log("[LocalizationEditor] translations.csv not found. Creating new data.");
                     return;
                 }
 
-                var csvFiles = Directory.GetFiles(LocalizationManager.LanguagesPath, "*.csv", SearchOption.TopDirectoryOnly);
-
-                foreach (var file in csvFiles)
+                try
                 {
-                    try
+                    var loadedData = LocaleCsvSerializer.LoadTranslations(filePath);
+
+                    foreach (var langCode in loadedData.GetAllLanguageCodes())
                     {
-                        var localeData = LocaleCsvSerializer.LoadFile(file, out var langCode);
-
-                        if (string.IsNullOrEmpty(langCode))
-                        {
-                            continue;
-                        }
-
-                        if (!LanguageDefinitions.IsValidLanguage(langCode))
-                        {
-                            Debug.LogError($"[LocalizationEditor] Rejecting file '{Path.GetFileName(file)}' - unsupported language code: '{langCode}'");
-                            continue;
-                        }
-
                         if (!_data.LanguageCodes.Contains(langCode))
                         {
                             _data.LanguageCodes.Add(langCode);
                         }
+                    }
 
-                        foreach (var entry in localeData.Translations)
+                    foreach (var entry in loadedData.Translations)
+                    {
+                        string key = entry.Key;
+                        var keyDict = entry.Value;
+
+                        if (string.IsNullOrEmpty(key))
+                            continue;
+
+                        if (!_data.LanguageData.TryGetValue(key, out var editorKeyDict))
                         {
-                            string key = entry.Key;
-                            object value = entry.Value;
+                            editorKeyDict = new Dictionary<string, string>(_data.LanguageCodes.Count);
+                            _data.LanguageData[key] = editorKeyDict;
+                            _data.Keys.Add(key);
+                        }
 
-                            if (string.IsNullOrEmpty(key))
-                                continue;
-
-                            if (!_data.LanguageData.TryGetValue(key, out var keyData))
-                            {
-                                keyData = new Dictionary<string, object>(_data.LanguageCodes.Count);
-                                _data.LanguageData[key] = keyData;
-                                _data.Keys.Add(key);
-                            }
-
-                            keyData[langCode] = value;
+                        foreach (var kvp in keyDict)
+                        {
+                            editorKeyDict[kvp.Key] = kvp.Value;
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        Debug.LogError($"[LocalizationEditor] Error loading file '{file}': {ex}");
-                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"[LocalizationEditor] Error loading translations.csv: {ex}");
                 }
 
                 SyncMissingLanguageEntries();
@@ -340,11 +332,7 @@ namespace PicoShot.Localization
                 {
                     if (!_data.LanguageData[key].ContainsKey(lang))
                     {
-                        if (isArray && firstValue is List<string> list)
-                        {
-                            _data.LanguageData[key][lang] = new List<string>(new string[list.Count]);
-                        }
-                        else
+                        if (!_data.LanguageData[key].ContainsKey(lang))
                         {
                             _data.LanguageData[key][lang] = "";
                         }
@@ -366,27 +354,31 @@ namespace PicoShot.Localization
 
                 long timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-                foreach (var lang in _data.LanguageCodes)
+                var exportData = new LanguageData
                 {
-                    var localeData = new LocaleData
-                    {
-                        Version = 1,
-                        LanguageCode = lang,
-                        Timestamp = timestamp,
-                        Translations = new Dictionary<string, object>(),
-                    };
+                    Version = 1,
+                    Timestamp = timestamp,
+                    Translations = new Dictionary<string, Dictionary<string, string>>()
+                };
 
-                    foreach (var key in _data.Keys)
+                foreach (var key in _data.Keys)
+                {
+                    exportData.Translations[key] = new Dictionary<string, string>();
+                    foreach (var lang in _data.LanguageCodes)
                     {
                         if (_data.LanguageData[key].TryGetValue(lang, out var value))
                         {
-                            localeData.Translations[key] = value;
+                            exportData.Translations[key][lang] = value;
+                        }
+                        else
+                        {
+                            exportData.Translations[key][lang] = "";
                         }
                     }
-
-                    string filePath = LocalizationManager.GetLanguageFilePath(lang);
-                    LocaleCsvSerializer.SaveFile(filePath, localeData);
                 }
+
+                string filePath = Path.Combine(LocalizationManager.LanguagesPath, "translations.csv");
+                LocaleCsvSerializer.SaveTranslations(filePath, exportData);
 
                 LocalizationConfigProvider.SaveConfig();
 

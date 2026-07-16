@@ -272,53 +272,45 @@ namespace PicoShot.Localization
 
             try
             {
-                if (!Directory.Exists(LanguagesPath))
+                string filePath = Path.Combine(LanguagesPath, "translations.csv");
+
+                if (!File.Exists(filePath))
                 {
 #if !UNITY_EDITOR
-                    Debug.LogWarning($"[LocalizationManager] Languages directory not found: {LanguagesPath}");
+                    Debug.LogWarning($"[LocalizationManager] translations.csv not found: {filePath}");
 #endif
                     return;
                 }
 
-                File.GetAttributes(LanguagesPath);
+                var data = LocaleCsvSerializer.LoadTranslations(filePath);
+                var languages = data.GetAllLanguageCodes();
 
-                var blocFiles = Directory.GetFiles(LanguagesPath, $"*{FileExtension}", SearchOption.TopDirectoryOnly);
-                var config = LocalizationConfigProvider.Config;
-
-                foreach (var file in blocFiles)
+                foreach (var lang in languages)
                 {
-                    string fileName = Path.GetFileName(file);
-                    string languageCode = Path.GetFileNameWithoutExtension(file);
-
-                    if (!LanguageDefinitions.IsValidLanguage(languageCode))
+                    if (!LanguageDefinitions.IsValidLanguage(lang))
                     {
-                        Debug.LogError($"[LocalizationManager] Rejecting file '{fileName}' - unsupported language code: '{languageCode}'");
-                        OnLanguageLoadError?.Invoke($"Unsupported language: {languageCode}");
+                        Debug.LogError($"[LocalizationManager] Rejecting unsupported language code: '{lang}' in translations.csv");
+                        OnLanguageLoadError?.Invoke($"Unsupported language: {lang}");
                         continue;
                     }
-
-                    _availableLanguages.Add(languageCode);
+                    _availableLanguages.Add(lang);
                 }
 
+                var config = LocalizationConfigProvider.Config;
                 if (_availableLanguages.Contains(config.DefaultLanguage))
                 {
-                    try
+                    foreach (var kvp in data.Translations)
                     {
-                        var defaultData = LoadLocaleFile(config.DefaultLanguage);
-                        foreach (var key in defaultData.Keys)
+                        if (kvp.Value.ContainsKey(config.DefaultLanguage))
                         {
-                            _allTranslationKeys.Add(key);
+                            _allTranslationKeys.Add(kvp.Key);
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.LogError($"[LocalizationManager] Failed to load default language keys: {ex}");
                     }
                 }
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"[LocalizationManager] Languages directory is not accessible: {ex.Message}");
+                Debug.LogWarning($"[LocalizationManager] Failed to scan translations.csv: {ex.Message}");
             }
         }
 
@@ -428,27 +420,28 @@ namespace PicoShot.Localization
 
         private static LanguageDictionary LoadLocaleFile(string languageCode)
         {
-            string filePath = GetLocaleFilePath(languageCode);
+            string filePath = Path.Combine(LanguagesPath, "translations.csv");
 
             if (!File.Exists(filePath))
             {
-                throw new FileNotFoundException($"Locale file not found for language '{languageCode}'", filePath);
+                throw new FileNotFoundException($"translations.csv file not found at", filePath);
             }
 
-            var localeData = LocaleCsvSerializer.LoadFile(filePath, out var _);
+            var data = LocaleCsvSerializer.LoadTranslations(filePath);
+            var langDict = new Dictionary<string, object>();
 
-            if (localeData?.Translations == null)
+            foreach (var kvp in data.Translations)
             {
-                return new LanguageDictionary(new Dictionary<string, object>());
+                if (kvp.Value.TryGetValue(languageCode, out var value))
+                {
+                    langDict[kvp.Key] = value;
+                }
             }
 
-            return new LanguageDictionary(localeData.Translations);
+            return new LanguageDictionary(langDict);
         }
 
-        private static string GetLocaleFilePath(string languageCode)
-        {
-            return Path.Combine(LanguagesPath, $"{languageCode}{FileExtension}");
-        }
+
 
         /// <summary>
         /// Detects system language from Unity settings.
@@ -546,24 +539,7 @@ namespace PicoShot.Localization
             return text;
         }
 
-        internal static string GetLogicalArrayText(string key, int index)
-        {
-            if (string.IsNullOrEmpty(key)) return string.Empty;
-            if (!_isInitialized) Initialize();
 
-            string[] array = GetArrayInternal(Key.FromKey(key));
-            if (array == null || array.Length == 0)
-            {
-                Debug.LogWarning($"[LocalizationManager] Key '{key}' is not an array or is empty");
-                return $"[{key}]";
-            }
-
-            if (index >= 0 && index < array.Length)
-                return array[index] ?? string.Empty;
-
-            Debug.LogWarning($"[LocalizationManager] Array index {index} out of range for key '{key}'");
-            return $"[{key}:{index}]";
-        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static string GetText(long keyHash, params object[] args)
@@ -668,41 +644,15 @@ namespace PicoShot.Localization
             ReadOnlySpan<char> keySpan = key.AsSpan();
             long keyHash = Hash64.CreateIgnoreCase(keySpan);
 
-            int foundIndex = -1;
-            if (keySpan[keySpan.Length - 1] == ']')
-            {
-                for (int i = keySpan.Length - 1; i >= 0; i--)
-                {
-                    if (keySpan[i] != '[')
-                        continue;
-
-                    if (int.TryParse(keySpan.Slice(i + 1, keySpan.Length - (i + 2)), out int idx))
-                    {
-                        keyHash = Hash64.CreateIgnoreCase(keySpan.Slice(0, i));
-                        foundIndex = idx;
-                    }
-
-                    break;
-                }
-            }
-
             if (_currentLanguageData != null && _currentLanguageData.TryGetValue(keyHash, out var value))
             {
-                return value switch
-                {
-                    List<string> list => list.Count > 0 ? list[foundIndex > -1 && foundIndex < list.Count ? foundIndex : 0] : key,
-                    _ => value?.ToString() ?? key
-                };
+                return value ?? key;
             }
 
             if (_fallbackLanguageData != null && _fallbackLanguageData.TryGetValue(keyHash, out var fallbackValue))
             {
                 OnMissingTranslation?.Invoke($"Using fallback for key '{key}' in '{_currentLanguageCode}'");
-                return fallbackValue switch
-                {
-                    List<string> list => list.Count > 0 ? list[foundIndex > -1 && foundIndex < list.Count ? foundIndex : 0] : key,
-                    _ => fallbackValue?.ToString() ?? key
-                };
+                return fallbackValue ?? key;
             }
 
             OnMissingTranslation?.Invoke($"Missing translation for key '{key}' in '{_currentLanguageCode}'");
@@ -714,141 +664,20 @@ namespace PicoShot.Localization
         {
             if (_currentLanguageData != null && _currentLanguageData.TryGetValue(keyHash, out var value))
             {
-                return value switch
-                {
-                    List<string> list => list.Count > 0 ? list[0] : keyHash.ToString(),
-                    _ => value?.ToString() ?? keyHash.ToString()
-                };
+                return value ?? keyHash.ToString();
             }
 
             if (_fallbackLanguageData != null && _fallbackLanguageData.TryGetValue(keyHash, out var fallbackValue))
             {
                 OnMissingTranslation?.Invoke($"Using fallback for key '{keyHash}' in '{_currentLanguageCode}'");
-                return fallbackValue switch
-                {
-                    List<string> list => list.Count > 0 ? list[0] : keyHash.ToString(),
-                    _ => fallbackValue?.ToString() ?? keyHash.ToString()
-                };
+                return fallbackValue ?? keyHash.ToString();
             }
 
             OnMissingTranslation?.Invoke($"Missing translation for key '{keyHash}' in '{_currentLanguageCode}'");
             return keyHash.ToString();
         }
 
-        /// <summary>
-        /// Gets an array of strings by key.
-        /// </summary>
-        public static string[] GetArray(string key)
-        {
-            if (string.IsNullOrEmpty(key))
-            {
-                Debug.LogError("[LocalizationManager] GetArray called with null or empty key");
-                return null;
-            }
 
-            if (!_isInitialized)
-            {
-                Initialize();
-            }
-
-            long keyHash = Hash64.CreateIgnoreCase(key);
-
-            if (_arrayCache.TryGetValue(keyHash, out var cached))
-                return cached;
-
-            var array = GetArrayInternal(Key.FromHash(keyHash));
-
-            if (array == null)
-                return null;
-
-            if (LocalizationConfigProvider.Config.SupportMixedText)
-            {
-                for (int i = 0; i < array.Length; i++)
-                {
-                    array[i] = RtlTextHandler.FixMixed(array[i], IsRightToLeft);
-                }
-            }
-            else if (IsRightToLeft)
-            {
-                for (int i = 0; i < array.Length; i++)
-                {
-                    array[i] = RtlTextHandler.Fix(array[i]);
-                }
-            }
-
-            _arrayCache[keyHash] = array;
-            return array;
-        }
-
-        /// <summary>
-        /// Gets an array of strings by key.
-        /// </summary>
-        public static string[] GetArray(Key key) => GetArray(key.Value);
-
-        /// <summary>
-        /// Gets a single element from an array by key and index.
-        /// </summary>
-        public static string GetArrayText(string key, int index)
-        {
-            var array = GetArray(key);
-
-            if (array == null || array.Length == 0)
-            {
-                Debug.LogWarning($"[LocalizationManager] Key '{key}' is not an array or is empty");
-                return $"[{key}]";
-            }
-
-            if (index >= 0 && index < array.Length)
-            {
-                return array[index] ?? string.Empty;
-            }
-
-            Debug.LogWarning($"[LocalizationManager] Array index {index} out of range for key '{key}'");
-            return $"[{key}:{index}]";
-        }
-
-        /// <summary>
-        /// Gets a single element from an array by key and index.
-        /// </summary>
-        public static string GetArrayText(Key key, int index) => GetArrayText(key.Value, index);
-
-        private static string[] GetArrayInternal(Key key)
-        {
-            object value = null;
-            bool found = false;
-
-            if (_currentLanguageData != null)
-            {
-                found = _currentLanguageData.TryGetValue(key.Hash, out value);
-            }
-
-            if (!found && _fallbackLanguageData != null)
-            {
-                found = _fallbackLanguageData.TryGetValue(key.Hash, out value);
-                if (found)
-                {
-                    OnMissingTranslation?.Invoke($"Using fallback for array key '{key}' in '{_currentLanguageCode}'");
-                }
-            }
-
-            if (!found)
-            {
-                OnMissingTranslation?.Invoke($"Missing array translation for key '{key}' in '{_currentLanguageCode}'");
-                return null;
-            }
-
-            return ConvertToStringArray(value);
-        }
-
-        private static string[] ConvertToStringArray(object value)
-        {
-            return value switch
-            {
-                List<string> list => list.ToArray(),
-                string single => new[] { single },
-                _ => null
-            };
-        }
 
         #endregion
 
@@ -935,7 +764,7 @@ namespace PicoShot.Localization
         /// </summary>
         public static string GetLanguageFilePath(string languageCode)
         {
-            return GetLocaleFilePath(languageCode);
+            return System.IO.Path.Combine(LanguagesPath, "translations.csv");
         }
 
         /// <summary>

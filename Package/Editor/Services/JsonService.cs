@@ -42,22 +42,7 @@ namespace PicoShot.Localization.Editor.Services
                 string lang = langs[i];
                 var value = keyData[lang];
 
-                sb.Append($"  \"{lang}\": ");
-
-                if (value is List<string> arr)
-                {
-                    sb.Append("[");
-                    for (int j = 0; j < arr.Count; j++)
-                    {
-                        sb.Append($"\"{EscapeJsonString(arr[j])}\"");
-                        if (j < arr.Count - 1) sb.Append(", ");
-                    }
-                    sb.Append("]");
-                }
-                else
-                {
-                    sb.Append($"\"{EscapeJsonString(value?.ToString() ?? "")}\"");
-                }
+                sb.Append($"  \"{lang}\": \"{EscapeJsonString(value)}\"");
 
                 if (i < langs.Count - 1) sb.Append(",");
                 sb.AppendLine();
@@ -96,43 +81,16 @@ namespace PicoShot.Localization.Editor.Services
                     return;
                 }
 
-                bool isArrayKey = LanguageEditorData.IsArrayKey(_data.LanguageData[key]);
                 int importedCount = 0;
 
                 foreach (var kvp in parsedData)
                 {
                     string lang = kvp.Key;
-                    object value = kvp.Value;
+                    string value = kvp.Value;
 
-                    if (!_data.LanguageCodes.Contains(lang))
-                        continue;
-
-                    if (isArrayKey && value is List<string> list)
+                    if (_data.LanguageCodes.Contains(lang))
                     {
-                        _data.LanguageData[key][lang] = new List<string>(list);
-                        importedCount++;
-                    }
-                    else if (!isArrayKey && value is string str)
-                    {
-                        _data.LanguageData[key][lang] = str;
-                        importedCount++;
-                    }
-                    else if (!isArrayKey && value is List<string> strList && strList.Count > 0)
-                    {
-                        _data.LanguageData[key][lang] = strList[0];
-                        importedCount++;
-                    }
-                    else if (isArrayKey && value is string arrStr)
-                    {
-                        var existingList = _data.LanguageData[key][lang] as List<string>;
-                        if (existingList != null && existingList.Count > 0)
-                        {
-                            existingList[0] = arrStr;
-                        }
-                        else
-                        {
-                            _data.LanguageData[key][lang] = new List<string> { arrStr };
-                        }
+                        _data.LanguageData[key][lang] = value;
                         importedCount++;
                     }
                 }
@@ -179,22 +137,7 @@ namespace PicoShot.Localization.Editor.Services
                             string lang = langs[j];
                             var value = keyData[lang];
 
-                            sb.Append($"    \"{lang}\": ");
-
-                            if (value is List<string> arr)
-                            {
-                                sb.Append("[");
-                                for (int k = 0; k < arr.Count; k++)
-                                {
-                                    sb.Append($"\"{EscapeJsonString(arr[k])}\"");
-                                    if (k < arr.Count - 1) sb.Append(", ");
-                                }
-                                sb.Append("]");
-                            }
-                            else
-                            {
-                                sb.Append($"\"{EscapeJsonString(value?.ToString() ?? "")}\"");
-                            }
+                            sb.Append($"    \"{lang}\": \"{EscapeJsonString(value)}\"");
 
                             if (j < langs.Count - 1) sb.Append(",");
                             sb.Append("\n");
@@ -256,22 +199,7 @@ namespace PicoShot.Localization.Editor.Services
                             string lang = langs[j];
                             var value = keyData[lang];
 
-                            sb.Append($"    \"{lang}\": ");
-
-                            if (value is List<string> arr)
-                            {
-                                sb.Append("[");
-                                for (int k = 0; k < arr.Count; k++)
-                                {
-                                    sb.Append($"\"{EscapeJsonString(arr[k])}\"");
-                                    if (k < arr.Count - 1) sb.Append(", ");
-                                }
-                                sb.Append("]");
-                            }
-                            else
-                            {
-                                sb.Append($"\"{EscapeJsonString(value?.ToString() ?? "")}\"");
-                            }
+                            sb.Append($"    \"{lang}\": \"{EscapeJsonString(value)}\"");
 
                             if (j < langs.Count - 1) sb.Append(",");
                             sb.Append("\n");
@@ -354,7 +282,7 @@ namespace PicoShot.Localization.Editor.Services
 
                     if (!_data.LanguageData.TryGetValue(key, out var keyData))
                     {
-                        keyData = new Dictionary<string, object>();
+                        keyData = new Dictionary<string, string>();
                         _data.LanguageData[key] = keyData;
                         _data.Keys.Add(key);
                         importedKeys++;
@@ -363,28 +291,7 @@ namespace PicoShot.Localization.Editor.Services
                     foreach (var langKvp in langData)
                     {
                         string lang = langKvp.Key;
-                        object value = langKvp.Value;
-
-                        if (!LanguageDefinitions.IsValidLanguage(lang))
-                        {
-                            skippedLangs++;
-                            continue;
-                        }
-
-                        if (!_data.LanguageCodes.Contains(lang))
-                        {
-                            _data.LanguageCodes.Add(lang);
-                            importedLangs++;
-                        }
-
-                        if (value is List<string> list)
-                        {
-                            keyData[lang] = new List<string>(list);
-                        }
-                        else
-                        {
-                            keyData[lang] = value?.ToString() ?? "";
-                        }
+                        keyData[lang] = langKvp.Value ?? "";
                     }
                 }
 
@@ -448,7 +355,7 @@ namespace PicoShot.Localization.Editor.Services
 
                     if (!_data.LanguageData.TryGetValue(key, out var keyData))
                     {
-                        keyData = new Dictionary<string, object>();
+                        keyData = new Dictionary<string, string>();
                         _data.LanguageData[key] = keyData;
                         _data.Keys.Add(key);
                         importedKeys++;
@@ -457,25 +364,7 @@ namespace PicoShot.Localization.Editor.Services
                     foreach (var langKvp in langData)
                     {
                         string lang = langKvp.Key;
-                        object value = langKvp.Value;
-
-                        if (!LanguageDefinitions.IsValidLanguage(lang))
-                            continue;
-
-                        if (!_data.LanguageCodes.Contains(lang))
-                        {
-                            _data.LanguageCodes.Add(lang);
-                            importedLangs++;
-                        }
-
-                        if (value is List<string> list)
-                        {
-                            keyData[lang] = new List<string>(list);
-                        }
-                        else
-                        {
-                            keyData[lang] = value?.ToString() ?? "";
-                        }
+                        keyData[lang] = langKvp.Value ?? "";
                     }
                 }
 
@@ -498,9 +387,9 @@ namespace PicoShot.Localization.Editor.Services
         /// <summary>
         /// Parses JSON for a single key's translations.
         /// </summary>
-        private Dictionary<string, object> ParseKeyJson(string json)
+        private Dictionary<string, string> ParseKeyJson(string json)
         {
-            var result = new Dictionary<string, object>();
+            var result = new Dictionary<string, string>();
             if (string.IsNullOrWhiteSpace(json)) return result;
 
             int pos = 0;
@@ -535,14 +424,7 @@ namespace PicoShot.Localization.Editor.Services
 
                 SkipWhitespace(json, ref pos);
 
-                if (pos < json.Length && json[pos] == '[')
-                {
-                    result[lang] = ParseJsonArray(json, ref pos);
-                }
-                else
-                {
-                    result[lang] = ParseJsonString(json, ref pos);
-                }
+                result[lang] = ParseJsonString(json, ref pos);
 
                 SkipWhitespace(json, ref pos);
 
@@ -565,9 +447,9 @@ namespace PicoShot.Localization.Editor.Services
         /// <summary>
         /// Parses full localization JSON.
         /// </summary>
-        private Dictionary<string, Dictionary<string, object>> ParseLocalizationJson(string json)
+        private Dictionary<string, Dictionary<string, string>> ParseLocalizationJson(string json)
         {
-            var result = new Dictionary<string, Dictionary<string, object>>();
+            var result = new Dictionary<string, Dictionary<string, string>>();
             if (string.IsNullOrWhiteSpace(json)) return result;
 
             int pos = 0;
@@ -606,7 +488,7 @@ namespace PicoShot.Localization.Editor.Services
                     throw new Exception("Expected '{' for language object");
                 pos++;
 
-                var langDict = new Dictionary<string, object>();
+                var langDict = new Dictionary<string, string>();
                 SkipWhitespace(json, ref pos);
 
                 if (pos < json.Length && json[pos] != '}')
@@ -631,15 +513,7 @@ namespace PicoShot.Localization.Editor.Services
 
                         SkipWhitespace(json, ref pos);
 
-                        object value;
-                        if (pos < json.Length && json[pos] == '[')
-                        {
-                            value = ParseJsonArray(json, ref pos);
-                        }
-                        else
-                        {
-                            value = ParseJsonString(json, ref pos);
-                        }
+                        string value = ParseJsonString(json, ref pos);
                         langDict[lang] = value;
 
                         SkipWhitespace(json, ref pos);
@@ -678,56 +552,7 @@ namespace PicoShot.Localization.Editor.Services
             return result;
         }
 
-        /// <summary>
-        /// Parses a JSON array of strings.
-        /// </summary>
-        private List<string> ParseJsonArray(string json, ref int pos)
-        {
-            var result = new List<string>();
 
-            if (pos >= json.Length || json[pos] != '[')
-                throw new Exception("Expected '[' for array");
-            pos++;
-
-            SkipWhitespace(json, ref pos);
-
-            if (pos < json.Length && json[pos] == ']')
-            {
-                pos++;
-                return result;
-            }
-
-            while (pos < json.Length)
-            {
-                SkipWhitespace(json, ref pos);
-                if (pos >= json.Length) break;
-
-                if (json[pos] == ']')
-                {
-                    pos++;
-                    break;
-                }
-
-                string value = ParseJsonString(json, ref pos);
-                result.Add(value);
-
-                SkipWhitespace(json, ref pos);
-
-                if (pos < json.Length && json[pos] == ',')
-                {
-                    pos++;
-                    continue;
-                }
-
-                if (pos < json.Length && json[pos] == ']')
-                {
-                    pos++;
-                    break;
-                }
-            }
-
-            return result;
-        }
 
         /// <summary>
         /// Parses a JSON string value.

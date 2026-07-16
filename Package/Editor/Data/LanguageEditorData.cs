@@ -34,8 +34,6 @@ namespace PicoShot.Localization.Editor.Data
         public string KeySearchFilter { get; set; } = "";
         public string LanguageFilter { get; set; } = "";
         public string ComponentSearchFilter { get; set; } = "";
-        public bool ShowArrayKeysOnly { get; set; }
-        public bool ShowStringKeysOnly { get; set; }
         public bool SortKeysByName { get; set; }
 
         // Foldouts
@@ -70,7 +68,7 @@ namespace PicoShot.Localization.Editor.Data
         // Core Data
         public List<string> LanguageCodes { get; } = new() { "en" };
         public List<string> Keys { get; set; } = new();
-        public Dictionary<string, Dictionary<string, object>> LanguageData { get; private set; } = new();
+        public Dictionary<string, Dictionary<string, string>> LanguageData { get; private set; } = new();
         public Dictionary<string, bool> KeyFoldouts { get; } = new();
         public Dictionary<string, bool> LanguageSelectionForCharset { get; } = new();
         public string GeneratedCharset { get; private set; } = "";
@@ -185,11 +183,6 @@ namespace PicoShot.Localization.Editor.Data
             if (hasFilter)
                 query = query.Where(key => key.ToLower().Contains(lowercaseFilter));
 
-            if (ShowArrayKeysOnly)
-                query = query.Where(key => IsArrayKey(LanguageData[key]));
-            else if (ShowStringKeysOnly)
-                query = query.Where(key => !IsArrayKey(LanguageData[key]));
-
             if (SortKeysByName)
                 query = query.OrderBy(key => key);
 
@@ -221,20 +214,9 @@ namespace PicoShot.Localization.Editor.Data
         }
 
         /// <summary>
-        /// Checks if a key's data represents an array type.
-        /// </summary>
-        public static bool IsArrayKey(Dictionary<string, object> keyData)
-        {
-            if (keyData == null || keyData.Count == 0)
-                return false;
-            var firstValue = keyData.Values.FirstOrDefault();
-            return firstValue is List<string> || firstValue is string[];
-        }
-
-        /// <summary>
         /// Gets the first available value for a key, checking default language first.
         /// </summary>
-        public object GetFirstValue(string key)
+        public string GetFirstValue(string key)
         {
             if (!LanguageData.TryGetValue(key, out var keyData) || keyData.Count == 0)
                 return null;
@@ -249,7 +231,7 @@ namespace PicoShot.Localization.Editor.Data
         /// <summary>
         /// Gets the first value from a key data dictionary.
         /// </summary>
-        public static object GetFirstValue(Dictionary<string, object> keyData)
+        public static string GetFirstValue(Dictionary<string, string> keyData)
         {
             if (keyData == null || keyData.Count == 0)
                 return null;
@@ -259,18 +241,6 @@ namespace PicoShot.Localization.Editor.Data
                 return value;
 
             return keyData.Values.FirstOrDefault();
-        }
-
-        /// <summary>
-        /// Converts an object value to List<string> if it's an array type.
-        /// </summary>
-        public static List<string> ConvertToList(object value)
-        {
-            if (value is List<string> list)
-                return list;
-            if (value is string[] arr)
-                return arr.ToList();
-            return null;
         }
 
         /// <summary>
@@ -313,17 +283,7 @@ namespace PicoShot.Localization.Editor.Data
         /// </summary>
         private void AddLanguageToKey(string key, string language)
         {
-            var firstValue = GetFirstValue(key);
-
-            if (firstValue is List<string> arr)
-            {
-                var newArray = new List<string>(new string[arr.Count]);
-                LanguageData[key][language] = newArray;
-            }
-            else
-            {
-                LanguageData[key][language] = "";
-            }
+            LanguageData[key][language] = "";
         }
 
         /// <summary>
@@ -348,18 +308,18 @@ namespace PicoShot.Localization.Editor.Data
         /// <summary>
         /// Adds a new key to the data. Key names must be unique regardless of casing.
         /// </summary>
-        public bool AddKey(string key, bool isArray)
+        public bool AddKey(string key)
         {
             key = key?.Trim();
             if (string.IsNullOrEmpty(key) || Keys.Any(k => k.Equals(key, StringComparison.OrdinalIgnoreCase)))
                 return false;
 
             Keys.Add(key);
-            LanguageData[key] = new Dictionary<string, object>();
+            LanguageData[key] = new Dictionary<string, string>();
 
             foreach (var lang in LanguageCodes)
             {
-                LanguageData[key][lang] = isArray ? new List<string>() : "";
+                LanguageData[key][lang] = "";
             }
 
             SelectedKey = key;
@@ -436,65 +396,10 @@ namespace PicoShot.Localization.Editor.Data
 
             foreach (var lang in keyData.Keys.ToList())
             {
-                keyData[lang] = keyData[lang] switch
-                {
-                    string => "",
-                    List<string> list => Enumerable.Repeat("", list.Count).ToList(),
-                    _ => keyData[lang]
-                };
+                keyData[lang] = "";
             }
 
             HasUnsavedChanges = true;
-        }
-
-        /// <summary>
-        /// Adds an element to an array key for all languages.
-        /// </summary>
-        public void AddArrayElement(string key)
-        {
-            foreach (var lang in LanguageCodes)
-            {
-                if (LanguageData[key][lang] is List<string> langArray)
-                {
-                    langArray.Add("");
-                }
-            }
-            HasUnsavedChanges = true;
-        }
-
-        /// <summary>
-        /// Removes an element from an array key for all languages.
-        /// </summary>
-        public void RemoveArrayElement(string key, int index)
-        {
-            foreach (var lang in LanguageCodes)
-            {
-                if (LanguageData[key][lang] is List<string> langArray && index < langArray.Count)
-                {
-                    langArray.RemoveAt(index);
-                }
-            }
-            HasUnsavedChanges = true;
-        }
-
-        /// <summary>
-        /// Clears empty array elements from an array key.
-        /// </summary>
-        public void ClearEmptyArrayElements(string key)
-        {
-            var firstValue = GetFirstValue(key);
-            if (firstValue is not List<string> firstArray)
-                return;
-
-            for (int i = firstArray.Count - 1; i >= 0; i--)
-            {
-                bool isEmpty = LanguageCodes.All(lang =>
-                    LanguageData[key][lang] is not List<string> langArray ||
-                    string.IsNullOrWhiteSpace(langArray[i]));
-
-                if (isEmpty)
-                    RemoveArrayElement(key, i);
-            }
         }
 
         /// <summary>
@@ -545,18 +450,12 @@ namespace PicoShot.Localization.Editor.Data
             HasGeneratedCharset = false;
         }
 
-        private static void AddValueToCharset(object value, HashSet<char> charSet)
+        private static void AddValueToCharset(string value, HashSet<char> charSet)
         {
-            switch (value)
+            if (!string.IsNullOrEmpty(value))
             {
-                case string str:
-                    foreach (var c in str)
-                        charSet.Add(c);
-                    break;
-                case List<string> list:
-                    foreach (var c in list.Where(item => item != null).SelectMany(item => item))
-                        charSet.Add(c);
-                    break;
+                foreach (var c in value)
+                    charSet.Add(c);
             }
         }
     }

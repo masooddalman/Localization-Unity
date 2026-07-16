@@ -9,11 +9,11 @@ namespace PicoShot.Localization
     {
         private string[] keys;
         private long[] keyHashes;
-        private object[] values;
+        private string[] values;
 
         public ReadOnlySpan<string> Keys => keys;
         public ReadOnlySpan<long> KeyHashes => keyHashes;
-        public ReadOnlySpan<object> Values => values;
+        public ReadOnlySpan<string> Values => values;
         public int Count { get; private set; }
 
         public LanguageDictionary(Dictionary<string, object> data)
@@ -21,15 +21,15 @@ namespace PicoShot.Localization
             Count = data.Count;
             keys = new string[Count];
             keyHashes = new long[Count];
-            values = new object[Count];
+            values = new string[Count];
 
-            var temp = new (long hash, string key, object value)[Count];
+            var temp = new (long hash, string key, string value)[Count];
 
             int i = 0;
             foreach (var entry in data)
             {
                 string key = entry.Key;
-                temp[i++] = (Hash64.CreateIgnoreCase(key), key, entry.Value);
+                temp[i++] = (Hash64.CreateIgnoreCase(key), key, entry.Value?.ToString() ?? "");
             }
 
             Array.Sort(temp, (a, b) => a.hash.CompareTo(b.hash));
@@ -38,13 +38,7 @@ namespace PicoShot.Localization
             {
                 keyHashes[j] = temp[j].hash;
                 keys[j] = temp[j].key;
-                values[j] = temp[j].value switch
-                {
-                    null => null,
-                    List<string> list => list,
-                    string[] arr => new List<string>(arr),
-                    _ => temp[j].value.ToString()
-                };
+                values[j] = temp[j].value;
             }
         }
 
@@ -88,7 +82,7 @@ namespace PicoShot.Localization
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool TryGetValue(long keyHash, out object value)
+        public bool TryGetValue(long keyHash, out string value)
         {
             int index = FindIndexFromHash(keyHash);
 
@@ -103,7 +97,7 @@ namespace PicoShot.Localization
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool TryGetValue(string key, out object value) =>
+        public bool TryGetValue(string key, out string value) =>
             TryGetValue(Hash64.CreateIgnoreCase(key), out value);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

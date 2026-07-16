@@ -264,36 +264,6 @@ namespace PicoShot.Localization.Editor.Tabs
             }
 
             EditorGUILayout.EndHorizontal();
-
-            DrawArrayControlsIfNeeded(langComponent);
-        }
-
-        private void DrawArrayControlsIfNeeded(LocalizationTextComponent langComponent)
-        {
-            if (langComponent.TranslationKey == null) return;
-            if (!Data.LanguageData.TryGetValue(langComponent.TranslationKey, out var keyData)) return;
-            if (!LanguageEditorData.IsArrayKey(keyData)) return;
-
-            var firstValue = LanguageEditorData.GetFirstValue(keyData);
-            if (firstValue is not List<string> array) return;
-
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("Array Index:", GUILayout.Width(100));
-
-            var newArrayIndex = EditorGUILayout.IntSlider(langComponent.ArrayIndex, -1, array.Count - 1);
-
-            EditorGUILayout.LabelField("Array Size Limit:", GUILayout.Width(100));
-            var newArraySizeLimit = EditorGUILayout.IntSlider(langComponent.ArraySizeLimit, 0, array.Count);
-            langComponent.ArraySizeLimit = newArraySizeLimit;
-
-            if (newArrayIndex != langComponent.ArrayIndex)
-            {
-                Undo.RecordObject(langComponent, "Change Array Index");
-                langComponent.ArrayIndex = newArrayIndex;
-                EditorUtility.SetDirty(langComponent);
-            }
-
-            EditorGUILayout.EndHorizontal();
         }
 
         private void DrawExistingComponentsSection()

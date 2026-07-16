@@ -7,53 +7,56 @@ namespace PicoShot.Localization.Data
 {
     internal static class LocaleCsvSerializer
     {
-        public static LocaleData LoadFile(string path, out string languageCode)
+        public static LanguageData LoadTranslations(string path)
         {
+            var data = new LanguageData();
+
             if (!File.Exists(path))
-                throw new FileNotFoundException("CSV file not found", path);
-            
-            var data = new LocaleData();
-            languageCode = Path.GetFileNameWithoutExtension(path);
-            data.LanguageCode = languageCode;
-            
+                return data;
+
             using var reader = new StreamReader(path, Encoding.UTF8);
-            
+
             // Read header
-            if (!reader.EndOfStream)
+            if (reader.EndOfStream)
+                return data;
+
+            string headerLine = ReadCsvLine(reader);
+            var headerColumns = ParseCsvLine(headerLine);
+            if (headerColumns.Count < 2)
+                return data; // Needs at least Key and one language
+
+            // Extract languages from header (skip 'Key')
+            var languages = new List<string>();
+            for (int i = 1; i < headerColumns.Count; i++)
             {
-                reader.ReadLine(); // Skip header
+                languages.Add(headerColumns[i].Trim());
             }
-            
+
             while (!reader.EndOfStream)
             {
                 string line = ReadCsvLine(reader);
                 if (string.IsNullOrWhiteSpace(line)) continue;
-                
+
                 var columns = ParseCsvLine(line);
-                if (columns.Count < 3) continue;
-                
+                if (columns.Count == 0 || string.IsNullOrWhiteSpace(columns[0])) continue;
+
                 string key = columns[0];
-                string type = columns[1];
-                
-                if (type.Equals("String", StringComparison.OrdinalIgnoreCase))
+                var keyDict = new Dictionary<string, string>();
+
+                for (int i = 0; i < languages.Count; i++)
                 {
-                    data.SetString(key, columns[2]);
+                    string lang = languages[i];
+                    string value = (i + 1 < columns.Count) ? columns[i + 1] : "";
+                    keyDict[lang] = value;
                 }
-                else if (type.Equals("Array", StringComparison.OrdinalIgnoreCase))
-                {
-                    var list = new List<string>();
-                    for (int i = 2; i < columns.Count; i++)
-                    {
-                        list.Add(columns[i]);
-                    }
-                    data.SetArray(key, list);
-                }
+
+                data.Translations[key] = keyDict;
             }
-            
+
             return data;
         }
 
-        public static void SaveFile(string path, LocaleData data)
+        public static void SaveTranslations(string path, LanguageData data)
         {
             string directory = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
@@ -62,35 +65,32 @@ namespace PicoShot.Localization.Data
             var tempFile = $"{path}.tmp";
             try
             {
+                var languages = new List<string>(data.GetAllLanguageCodes());
+                languages.Sort();
+
                 using (var writer = new StreamWriter(tempFile, false, new UTF8Encoding(true)))
                 {
-                    writer.WriteLine("Key,Type,Value...");
-                    
+                    // Write Header
+                    writer.Write("Key");
+                    foreach (var lang in languages)
+                    {
+                        writer.Write($",{EscapeCsv(lang)}");
+                    }
+                    writer.WriteLine();
+
+                    // Write rows
                     foreach (var kvp in data.Translations)
                     {
-                        var key = EscapeCsv(kvp.Key);
-                        if (kvp.Value is List<string> list)
+                        string key = kvp.Key;
+                        writer.Write(EscapeCsv(key));
+
+                        var keyDict = kvp.Value;
+                        foreach (var lang in languages)
                         {
-                            writer.Write($"{key},Array");
-                            foreach (var item in list)
-                            {
-                                writer.Write($",{EscapeCsv(item)}");
-                            }
-                            writer.WriteLine();
+                            string val = keyDict.TryGetValue(lang, out var txt) ? txt : "";
+                            writer.Write($",{EscapeCsv(val)}");
                         }
-                        else if (kvp.Value is string[] arr)
-                        {
-                            writer.Write($"{key},Array");
-                            foreach (var item in arr)
-                            {
-                                writer.Write($",{EscapeCsv(item)}");
-                            }
-                            writer.WriteLine();
-                        }
-                        else
-                        {
-                            writer.WriteLine($"{key},String,{EscapeCsv(kvp.Value?.ToString())}");
-                        }
+                        writer.WriteLine();
                     }
                 }
 
@@ -111,12 +111,12 @@ namespace PicoShot.Localization.Data
         {
             var sb = new StringBuilder();
             bool inQuotes = false;
-            
+
             while (!reader.EndOfStream)
             {
                 int c = reader.Read();
                 if (c == -1) break;
-                
+
                 char ch = (char)c;
                 if (ch == '"')
                 {
@@ -131,7 +131,7 @@ namespace PicoShot.Localization.Data
                     }
                     break;
                 }
-                
+
                 sb.Append(ch);
             }
             return sb.ToString();
@@ -142,7 +142,7 @@ namespace PicoShot.Localization.Data
             var result = new List<string>();
             var currentField = new StringBuilder();
             bool inQuotes = false;
-            
+
             for (int i = 0; i < line.Length; i++)
             {
                 char ch = line[i];
@@ -168,7 +168,7 @@ namespace PicoShot.Localization.Data
                     currentField.Append(ch);
                 }
             }
-            
+
             result.Add(currentField.ToString()); // Add last field
             return result;
         }
@@ -176,7 +176,7 @@ namespace PicoShot.Localization.Data
         private static string EscapeCsv(string value)
         {
             if (string.IsNullOrEmpty(value)) return "";
-            
+
             bool needsQuotes = value.Contains(",") || value.Contains("\"") || value.Contains("\n") || value.Contains("\r");
             if (needsQuotes)
             {

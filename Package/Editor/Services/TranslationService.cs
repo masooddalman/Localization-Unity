@@ -34,35 +34,28 @@ namespace PicoShot.Localization.Editor.Services
 
             string defaultLang = LocalizationConfigProvider.Config.DefaultLanguage;
 
-            if (LanguageEditorData.IsArrayKey(keyData))
-            {
-                await TranslateAndFillArray(key, keyData, defaultLang);
-            }
-            else
-            {
-                await TranslateAndFillString(key, keyData, defaultLang);
-            }
+            await TranslateAndFillString(key, keyData, defaultLang);
         }
 
         /// <summary>
         /// Translates a string value for the given key.
         /// </summary>
-        private async Task TranslateAndFillString(string key, Dictionary<string, object> keyData, string defaultLang)
+        private async Task TranslateAndFillString(string key, Dictionary<string, string> keyData, string defaultLang)
         {
             string sourceText = null;
             string sourceLang = defaultLang;
 
-            if (keyData.TryGetValue(defaultLang, out var defaultValue) && defaultValue is string defaultStr)
+            if (keyData.TryGetValue(defaultLang, out var defaultValue) && !string.IsNullOrWhiteSpace(defaultValue))
             {
-                sourceText = defaultStr;
+                sourceText = defaultValue;
             }
             else
             {
                 foreach (var kvp in keyData)
                 {
-                    if (kvp.Value is string str && !string.IsNullOrWhiteSpace(str))
+                    if (!string.IsNullOrWhiteSpace(kvp.Value))
                     {
-                        sourceText = str;
+                        sourceText = kvp.Value;
                         sourceLang = kvp.Key;
                         break;
                     }
@@ -75,20 +68,20 @@ namespace PicoShot.Localization.Editor.Services
                 return;
             }
 
-            var targetLanguages = _data.LanguageCodes.Where(l => l != sourceLang && string.IsNullOrWhiteSpace(keyData[l]?.ToString())).ToList();
+            var targetLanguages = _data.LanguageCodes.Where(l => l != sourceLang && string.IsNullOrWhiteSpace(keyData[l])).ToList();
 
             if (targetLanguages.Count == 0)
                 return;
 
             if (_data.ActiveTranslationProvider == TranslationProvider.Gemini)
             {
-                await TranslateWithGeminiBatchAsync(sourceText, sourceLang, targetLanguages, keyData, -1);
+                await TranslateWithGeminiBatchAsync(sourceText, sourceLang, targetLanguages, keyData);
                 return;
             }
 
             foreach (var lang in targetLanguages)
             {
-                if (!string.IsNullOrWhiteSpace(keyData[lang]?.ToString()))
+                if (!string.IsNullOrWhiteSpace(keyData[lang]))
                     continue;
 
                 try
@@ -109,117 +102,7 @@ namespace PicoShot.Localization.Editor.Services
             }
         }
 
-        /// <summary>
-        /// Translates array elements for the given key.
-        /// Translates element by element, language by language to avoid API rate limits.
-        /// </summary>
-        private async Task TranslateAndFillArray(string key, Dictionary<string, object> keyData, string defaultLang)
-        {
-            List<string> sourceArray = null;
-            string sourceLang = defaultLang;
 
-            if (keyData.TryGetValue(defaultLang, out var defaultValue))
-            {
-                sourceArray = LanguageEditorData.ConvertToList(defaultValue);
-            }
-
-            if (sourceArray == null || sourceArray.Count == 0 || sourceArray.All(string.IsNullOrWhiteSpace))
-            {
-                foreach (var kvp in keyData)
-                {
-                    var list = LanguageEditorData.ConvertToList(kvp.Value);
-                    if (list != null && list.Count > 0 && list.Any(s => !string.IsNullOrWhiteSpace(s)))
-                    {
-                        sourceArray = list;
-                        sourceLang = kvp.Key;
-                        break;
-                    }
-                }
-            }
-
-            if (sourceArray == null || sourceArray.Count == 0 || sourceArray.All(string.IsNullOrWhiteSpace))
-            {
-                Debug.LogWarning($"The source array is empty for key '{key}', source text must be set to translate.");
-                return;
-            }
-
-            var targetLanguages = _data.LanguageCodes.Where(l => l != sourceLang).ToList();
-
-            // Initialize target arrays if needed
-            foreach (var lang in targetLanguages)
-            {
-                var existingArray = LanguageEditorData.ConvertToList(keyData[lang]);
-                if (existingArray != null && existingArray.Count > 0 && existingArray.Any(s => !string.IsNullOrWhiteSpace(s)))
-                    continue;
-
-                if (existingArray == null)
-                {
-                    existingArray = new List<string>(new string[sourceArray.Count]);
-                    keyData[lang] = existingArray;
-                }
-            }
-
-            // Translate element by element
-            for (int i = 0; i < sourceArray.Count; i++)
-            {
-                string sourceText = sourceArray[i];
-
-                if (string.IsNullOrWhiteSpace(sourceText))
-                {
-                    // Copy empty strings directly
-                    foreach (var lang in targetLanguages)
-                    {
-                        var targetArray = LanguageEditorData.ConvertToList(keyData[lang]);
-                        if (targetArray != null && targetArray.Count > i)
-                        {
-                            targetArray[i] = sourceText;
-                            _data.HasUnsavedChanges = true;
-                        }
-                    }
-                    continue;
-                }
-
-                var missingForElement = new List<string>();
-                foreach (var lang in targetLanguages)
-                {
-                    var targetArray = LanguageEditorData.ConvertToList(keyData[lang]);
-                    if (targetArray != null && targetArray.Count > i && string.IsNullOrWhiteSpace(targetArray[i]))
-                    {
-                        missingForElement.Add(lang);
-                    }
-                }
-
-                if (missingForElement.Count == 0)
-                    continue;
-
-                if (_data.ActiveTranslationProvider == TranslationProvider.Gemini)
-                {
-                    await TranslateWithGeminiBatchAsync(sourceText, sourceLang, missingForElement, keyData, i);
-                    continue;
-                }
-
-                foreach (var lang in missingForElement)
-                {
-                    var targetArray = LanguageEditorData.ConvertToList(keyData[lang]);
-                    if (targetArray == null || targetArray.Count <= i)
-                        continue;
-
-                    try
-                    {
-                        var translated = await TranslateText(sourceText, sourceLang, lang);
-                        targetArray[i] = !string.IsNullOrEmpty(translated) ? translated : sourceText;
-                        _data.HasUnsavedChanges = true;
-                        await Task.Delay(LanguageEditorData.DeeplRequestDelayMs);
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.LogError($"Translation error for {lang}, element {i}: {ex.Message}");
-                        targetArray[i] = sourceText;
-                        _data.HasUnsavedChanges = true;
-                    }
-                }
-            }
-        }
 
         /// <summary>
         /// Translates text using DeepL API.
@@ -304,7 +187,7 @@ namespace PicoShot.Localization.Editor.Services
 
         // --- Gemini Implementation ---
 
-        private async Task TranslateWithGeminiBatchAsync(string sourceText, string sourceLang, List<string> targetLanguages, Dictionary<string, object> keyData, int arrayIndex)
+        private async Task TranslateWithGeminiBatchAsync(string sourceText, string sourceLang, List<string> targetLanguages, Dictionary<string, string> keyData)
         {
             string apiKey = _data.GeminiApiKey;
             if (string.IsNullOrEmpty(apiKey))
@@ -352,18 +235,7 @@ namespace PicoShot.Localization.Editor.Services
                     {
                         if (parsedResult.TryGetValue(lang, out string translation))
                         {
-                            if (arrayIndex == -1)
-                            {
-                                keyData[lang] = translation;
-                            }
-                            else
-                            {
-                                var targetArray = LanguageEditorData.ConvertToList(keyData[lang]);
-                                if (targetArray != null && targetArray.Count > arrayIndex)
-                                {
-                                    targetArray[arrayIndex] = translation;
-                                }
-                            }
+                            keyData[lang] = translation;
                         }
                     }
                     _data.HasUnsavedChanges = true;

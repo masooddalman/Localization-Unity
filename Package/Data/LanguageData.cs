@@ -26,40 +26,9 @@ namespace PicoShot.Localization.Data
         /// Key: Translation key (e.g., "ui.play_button")
         /// Value: Dictionary of language code -> translation value
         /// </summary>
-        public Dictionary<string, Dictionary<string, object>> Translations { get; set; } = new();
+        public Dictionary<string, Dictionary<string, string>> Translations { get; set; } = new();
 
-        /// <summary>
-        /// Converts this multi-language data to a list of single-language LocaleData objects.
-        /// Used when saving to BLOC files.
-        /// </summary>
-        public List<LocaleData> ToLocaleDataList()
-        {
-            var result = new List<LocaleData>();
-            var languageCodes = GetAllLanguageCodes();
 
-            foreach (var langCode in languageCodes)
-            {
-                var localeData = new LocaleData
-                {
-                    Version = 1,
-                    LanguageCode = langCode,
-                    Timestamp = Timestamp
-                };
-
-                foreach (var kvp in Translations)
-                {
-                    string key = kvp.Key;
-                    if (kvp.Value.TryGetValue(langCode, out var value))
-                    {
-                        localeData.Translations[key] = value;
-                    }
-                }
-
-                result.Add(localeData);
-            }
-
-            return result;
-        }
 
         /// <summary>
         /// Gets all unique language codes in this data.

@@ -566,36 +566,7 @@ namespace PicoShot.Localization
 
         private void UpdateDropdown()
         {
-            var options = LocalizationManager.GetArray(translationKey);
-            if (options == null || options.Length == 0)
-            {
-                Debug.LogWarning($"[LocalizationTextComponent] No array data found for key '{translationKey}'", this);
-                return;
-            }
-
-            // Filter out empty options
-            options = options.Where(opt => !string.IsNullOrEmpty(opt)).ToArray();
-
-            // Apply size limit
-            if (arraySizeLimit > 0 && options.Length > arraySizeLimit)
-            {
-                options = options.Take(arraySizeLimit).ToArray();
-            }
-
-            // Apply text processors
-            for (int i = 0; i < options.Length; i++)
-            {
-                options[i] = ApplyProcessors(options[i]);
-            }
-
-            if (_tmpDropdown != null)
-            {
-                UpdateTMPDropdown(_tmpDropdown, options);
-            }
-            else if (_legacyDropdown != null)
-            {
-                UpdateLegacyDropdown(_legacyDropdown, options);
-            }
+            Debug.LogWarning($"[LocalizationTextComponent] Array support is currently disabled. Cannot update dropdown for key '{translationKey}'", this);
         }
 
         private static void UpdateTMPDropdown(TMP_Dropdown dropdown, string[] options)
@@ -637,10 +608,7 @@ namespace PicoShot.Localization
 
         private string GetTranslatedText()
         {
-            if (arrayIndex >= 0)
-            {
-                return LocalizationManager.GetArrayText(translationKey, arrayIndex);
-            }
+
 
             if (_dynamicFormatArgs != null && _dynamicFormatArgs.Length > 0)
             {
@@ -657,8 +625,7 @@ namespace PicoShot.Localization
 
         private string GetLogicalTranslatedText()
         {
-            if (arrayIndex >= 0)
-                return LocalizationManager.GetLogicalArrayText(translationKey, arrayIndex);
+
 
             if (_dynamicFormatArgs != null && _dynamicFormatArgs.Length > 0)
                 return LocalizationManager.GetLogicalText(translationKey, _dynamicFormatArgs);

@@ -10,15 +10,7 @@ namespace PicoShot.Localization
             return LocalizationManager.GetText(key, args);
         }
 
-        public static string[] LocalizedArray(this string key)
-        {
-            return LocalizationManager.GetArray(key);
-        }
 
-        public static string LocalizedArrayElement(this string key, int index)
-        {
-            return LocalizationManager.GetArrayText(key, index);
-        }
 
         /// <summary>
         /// Automatically sets the localized text on a TMP_Text component and binds it to the LocalizationTextComponent.

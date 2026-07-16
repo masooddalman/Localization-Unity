@@ -136,10 +136,8 @@ namespace PicoShot.Localization.Editor.Tabs
 
             EditorGUILayout.BeginHorizontal();
             GUILayout.FlexibleSpace();
-            if (GUILayout.Button("Add String Key", GUILayout.Width(120), GUILayout.Height(25)))
-                AddKey(false);
-            if (GUILayout.Button("Add Array Key", GUILayout.Width(120), GUILayout.Height(25)))
-                AddKey(true);
+            if (GUILayout.Button("Add Key", GUILayout.Width(120), GUILayout.Height(25)))
+                AddKey();
             EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.EndVertical();
@@ -161,23 +159,7 @@ namespace PicoShot.Localization.Editor.Tabs
 
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.LabelField("Filter:", GUILayout.Width(80));
-
-            var newShowArrayKeys = EditorGUILayout.ToggleLeft("Array Keys", Data.ShowArrayKeysOnly, GUILayout.Width(100));
-            var newShowStringKeys = EditorGUILayout.ToggleLeft("String Keys", Data.ShowStringKeysOnly, GUILayout.Width(100));
             Data.SortKeysByName = EditorGUILayout.ToggleLeft("Sort by Name", Data.SortKeysByName, GUILayout.Width(100));
-
-            if (newShowArrayKeys != Data.ShowArrayKeysOnly)
-            {
-                Data.ShowArrayKeysOnly = newShowArrayKeys;
-                Data.ShowStringKeysOnly = false;
-            }
-
-            if (newShowStringKeys != Data.ShowStringKeysOnly)
-            {
-                Data.ShowStringKeysOnly = newShowStringKeys;
-                Data.ShowArrayKeysOnly = false;
-            }
-
             EditorGUILayout.EndHorizontal();
 
             var totalKeys = Data.Keys.Count;
@@ -244,16 +226,8 @@ namespace PicoShot.Localization.Editor.Tabs
 
             GUIStyle keyStyle = GetKeyButtonStyle(key == Data.SelectedKey);
 
-            string typeIndicator = "Aa";
-            if (Data.LanguageData.TryGetValue(key, out var keyData) && keyData.Count > 0)
-            {
-                var firstValue = keyData.Values.FirstOrDefault();
-                if (firstValue is List<string> || firstValue is string[])
-                    typeIndicator = "[ ]";
-            }
-
             string displayKeyName = string.IsNullOrEmpty(Data.SelectedView) ? key : Data.GetLocalKeyName(key);
-            string buttonLabel = $"<color=#888888>{typeIndicator}</color> {displayKeyName}";
+            string buttonLabel = displayKeyName;
 
             if (GUI.Button(keyRect, buttonLabel, keyStyle))
             {
@@ -322,10 +296,7 @@ namespace PicoShot.Localization.Editor.Tabs
 
                 if (Data.LanguageData.TryGetValue(Data.SelectedKey, out var text))
                 {
-                    if (LanguageEditorData.IsArrayKey(text))
-                        DrawArrayKeyContent();
-                    else
-                        DrawStringKeyContent();
+                    DrawStringKeyContent();
 
                     EditorGUILayout.Space();
                     DrawKeyActionButtons();
@@ -379,98 +350,7 @@ namespace PicoShot.Localization.Editor.Tabs
             EditorGUILayout.EndVertical();
         }
 
-        private void DrawArrayKeyContent()
-        {
-            EditorGUILayout.BeginVertical("box");
 
-            var firstValue = Data.GetFirstValue(Data.SelectedKey);
-            var array = firstValue as List<string> ?? new List<string>();
-            DrawArrayElements(array);
-
-            EditorGUILayout.Space(5);
-
-            EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("Add New Element", GUILayout.Width(120), GUILayout.Height(25)))
-            {
-                Data.AddArrayElement(Data.SelectedKey);
-            }
-
-            if (GUILayout.Button("Clear Empty Elements", GUILayout.Width(140), GUILayout.Height(25)))
-            {
-                Data.ClearEmptyArrayElements(Data.SelectedKey);
-            }
-            EditorGUILayout.EndHorizontal();
-
-            EditorGUILayout.EndVertical();
-        }
-
-        private void DrawArrayElements(List<string> array)
-        {
-            bool elementDeleted = false;
-            int deleteIndex = -1;
-
-            for (int i = 0; i < array.Count; i++)
-            {
-                if (elementDeleted)
-                    break;
-
-                EditorGUILayout.BeginVertical("box");
-
-                EditorGUILayout.BeginHorizontal();
-                EditorGUILayout.LabelField($"Element {i}", EditorStyles.boldLabel);
-
-                GUI.backgroundColor = Color.red;
-                if (GUILayout.Button("×", GUILayout.Width(25)) && EditorUtility.DisplayDialog("Delete Element",
-                        $"Are you sure you want to delete element {i}?", "Yes", "No"))
-                {
-                    deleteIndex = i;
-                    elementDeleted = true;
-                }
-
-                GUI.backgroundColor = Color.white;
-                EditorGUILayout.EndHorizontal();
-
-                DrawArrayElementTranslations(i);
-
-                EditorGUILayout.EndVertical();
-            }
-
-            if (elementDeleted && deleteIndex >= 0)
-            {
-                Data.RemoveArrayElement(Data.SelectedKey, deleteIndex);
-            }
-        }
-
-        private void DrawArrayElementTranslations(int index)
-        {
-            foreach (var lang in Data.LanguageCodes)
-            {
-                var langName = LanguageDefinitions.GetDisplayName(lang);
-                EditorGUILayout.LabelField($"{langName}:", GUILayout.Width(120));
-
-                var langArray = (List<string>)Data.LanguageData[Data.SelectedKey][lang];
-                var currentText = langArray[index] ?? "";
-
-                Rect textRect = EditorGUILayout.GetControlRect();
-                EditorGUI.BeginDisabledGroup(true);
-                EditorGUI.TextField(textRect, currentText);
-                EditorGUI.EndDisabledGroup();
-
-                if (Event.current.type == EventType.MouseDown &&
-                    Event.current.clickCount == 2 &&
-                    textRect.Contains(Event.current.mousePosition))
-                {
-                    int capturedIndex = index;
-                    OpenTextEditor(currentText, (newText) =>
-                    {
-                        langArray[capturedIndex] = newText;
-                        Data.HasUnsavedChanges = true;
-                        Editor.Repaint();
-                    });
-                    Event.current.Use();
-                }
-            }
-        }
 
         private void DrawKeyActionButtons()
         {
@@ -523,11 +403,7 @@ namespace PicoShot.Localization.Editor.Tabs
                 Editor.ShowNotification(new GUIContent("GetText() snippet copied!"));
             });
 
-            menu.AddItem(new GUIContent("Copy with GetArray()"), false, () =>
-            {
-                EditorGUIUtility.systemCopyBuffer = $"LocalizationManager.GetArray(\"{Data.SelectedKey}\")";
-                Editor.ShowNotification(new GUIContent("GetArray() snippet copied!"));
-            });
+
 
             menu.ShowAsContext();
         }
@@ -573,29 +449,18 @@ namespace PicoShot.Localization.Editor.Tabs
             }
         }
 
-        private void AddKey(bool isArray)
+        private void AddKey()
         {
             string cleanKey = _newKey?.Trim();
             if (string.IsNullOrEmpty(cleanKey)) return;
 
             string fullKey = string.IsNullOrEmpty(Data.SelectedView) ? cleanKey : $"{Data.SelectedView}{Data.CurrentViewDelimiter}{cleanKey}";
-            if (Data.AddKey(fullKey, isArray))
+            if (Data.AddKey(fullKey))
             {
                 if (!string.IsNullOrEmpty(_newValue))
                 {
                     string defaultLang = Config.LocalizationConfigProvider.Config.DefaultLanguage;
-                    if (isArray)
-                    {
-                        foreach (var lang in Data.LanguageCodes)
-                        {
-                            var list = (List<string>)Data.LanguageData[fullKey][lang];
-                            list.Add(lang == defaultLang ? _newValue : "");
-                        }
-                    }
-                    else
-                    {
-                        Data.LanguageData[fullKey][defaultLang] = _newValue;
-                    }
+                    Data.LanguageData[fullKey][defaultLang] = _newValue;
                 }
 
                 _newKey = "";

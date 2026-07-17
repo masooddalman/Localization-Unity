@@ -161,6 +161,12 @@ namespace PicoShot.Localization.Editor.Tabs
         {
             if (Data.AddLanguage(language))
             {
+                var config = LocalizationConfigProvider.Config;
+                if (!config.FontMappings.Any(m => m.languageCode.Equals(language, StringComparison.OrdinalIgnoreCase)))
+                {
+                    config.SetFontMapping(language, null, null);
+                    LocalizationConfigProvider.SaveConfig();
+                }
                 Editor.Repaint();
             }
         }
@@ -169,6 +175,13 @@ namespace PicoShot.Localization.Editor.Tabs
         {
             if (Data.RemoveLanguage(language))
             {
+                var config = LocalizationConfigProvider.Config;
+                if (config.FontMappings.Any(m => m.languageCode.Equals(language, StringComparison.OrdinalIgnoreCase)))
+                {
+                    config.RemoveFontMapping(language);
+                    LocalizationConfigProvider.SaveConfig();
+                }
+
                 string filePath = LocalizationManager.GetLanguageFilePath(language);
                 if (System.IO.File.Exists(filePath))
                     System.IO.File.Delete(filePath);

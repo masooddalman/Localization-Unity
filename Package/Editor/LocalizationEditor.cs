@@ -275,12 +275,26 @@ namespace PicoShot.Localization
                 {
                     var loadedData = LocaleCsvSerializer.LoadTranslations(filePath);
 
+                    bool configChanged = false;
+                    var config = LocalizationConfigProvider.Config;
+
                     foreach (var langCode in loadedData.GetAllLanguageCodes())
                     {
                         if (!_data.LanguageCodes.Contains(langCode))
                         {
                             _data.LanguageCodes.Add(langCode);
+                            
+                            if (!config.FontMappings.Any(m => m.languageCode.Equals(langCode, StringComparison.OrdinalIgnoreCase)))
+                            {
+                                config.SetFontMapping(langCode, null, null);
+                                configChanged = true;
+                            }
                         }
+                    }
+
+                    if (configChanged)
+                    {
+                        LocalizationConfigProvider.SaveConfig();
                     }
 
                     foreach (var entry in loadedData.Translations)

@@ -7,6 +7,7 @@ using UnityEditor;
 using UnityEngine;
 using PicoShot.Localization.Data;
 using PicoShot.Localization.Editor.Data;
+using PicoShot.Localization.Config;
 
 namespace PicoShot.Localization.Editor.Services
 {
@@ -331,6 +332,19 @@ namespace PicoShot.Localization.Editor.Services
                     {
                         string lang = langKvp.Key;
                         keyData[lang] = langKvp.Value ?? "";
+
+                        if (!_data.LanguageCodes.Contains(lang))
+                        {
+                            _data.LanguageCodes.Add(lang);
+                            importedLangs++;
+                            
+                            var config = LocalizationConfigProvider.Config;
+                            if (!config.FontMappings.Any(m => m.languageCode.Equals(lang, StringComparison.OrdinalIgnoreCase)))
+                            {
+                                config.SetFontMapping(lang, null, null);
+                                LocalizationConfigProvider.SaveConfig();
+                            }
+                        }
                     }
                 }
 
@@ -404,6 +418,19 @@ namespace PicoShot.Localization.Editor.Services
                     {
                         string lang = langKvp.Key;
                         keyData[lang] = langKvp.Value ?? "";
+
+                        if (!_data.LanguageCodes.Contains(lang))
+                        {
+                            _data.LanguageCodes.Add(lang);
+                            importedLangs++;
+                            
+                            var config = LocalizationConfigProvider.Config;
+                            if (!config.FontMappings.Any(m => m.languageCode.Equals(lang, StringComparison.OrdinalIgnoreCase)))
+                            {
+                                config.SetFontMapping(lang, null, null);
+                                LocalizationConfigProvider.SaveConfig();
+                            }
+                        }
                     }
                 }
 

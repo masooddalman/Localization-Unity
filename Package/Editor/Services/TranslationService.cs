@@ -101,8 +101,240 @@ namespace PicoShot.Localization.Editor.Services
                 }
             }
         }
+        private class MissingTranslation
+        {
+            public string Key { get; set; }
+            public string SourceLang { get; set; }
+            public string TargetLang { get; set; }
+            public string SourceText { get; set; }
+        }
 
+        /// <summary>
+        /// Translates all missing translations across all keys using batching.
+        /// </summary>
+        public async Task TranslateAllMissingAsync(Action<float, string> onProgress, Func<bool> isCancelled)
+        {
+            var missingList = new List<MissingTranslation>();
+            string defaultLang = LocalizationConfigProvider.Config.DefaultLanguage;
 
+            foreach (var kvp in _data.LanguageData)
+            {
+                string key = kvp.Key;
+                var keyData = kvp.Value;
+
+                string sourceText = null;
+                string sourceLang = defaultLang;
+
+                if (keyData.TryGetValue(defaultLang, out var defaultValue) && !string.IsNullOrWhiteSpace(defaultValue))
+                {
+                    sourceText = defaultValue;
+                }
+                else
+                {
+                    foreach (var langKvp in keyData)
+                    {
+                        if (!string.IsNullOrWhiteSpace(langKvp.Value))
+                        {
+                            sourceText = langKvp.Value;
+                            sourceLang = langKvp.Key;
+                            break;
+                        }
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(sourceText))
+                    continue;
+
+                foreach (var targetLang in _data.LanguageCodes)
+                {
+                    if (targetLang == sourceLang) continue;
+                    
+                    if (!keyData.TryGetValue(targetLang, out var targetValue) || string.IsNullOrWhiteSpace(targetValue))
+                    {
+                        missingList.Add(new MissingTranslation
+                        {
+                            Key = key,
+                            SourceLang = sourceLang,
+                            TargetLang = targetLang,
+                            SourceText = sourceText
+                        });
+                    }
+                }
+            }
+
+            if (missingList.Count == 0)
+                return;
+
+            if (_data.ActiveTranslationProvider == TranslationProvider.Gemini)
+            {
+                await BatchTranslateGeminiAsync(missingList, onProgress, isCancelled);
+            }
+            else
+            {
+                await BatchTranslateDeepLAsync(missingList, onProgress, isCancelled);
+            }
+        }
+
+        private async Task BatchTranslateDeepLAsync(List<MissingTranslation> missingList, Action<float, string> onProgress, Func<bool> isCancelled)
+        {
+            var groups = missingList.GroupBy(m => new { m.SourceLang, m.TargetLang }).ToList();
+            int totalItems = missingList.Count;
+            int processedItems = 0;
+
+            foreach (var group in groups)
+            {
+                if (isCancelled != null && isCancelled()) break;
+
+                var items = group.ToList();
+                int batchSize = 50;
+
+                for (int i = 0; i < items.Count; i += batchSize)
+                {
+                    if (isCancelled != null && isCancelled()) break;
+
+                    var batch = items.Skip(i).Take(batchSize).ToList();
+                    string sourceLang = group.Key.SourceLang;
+                    string targetLang = group.Key.TargetLang;
+
+                    onProgress?.Invoke((float)processedItems / totalItems, $"DeepL: Translating {batch.Count} items to {targetLang}...");
+
+                    var texts = batch.Select(b => b.SourceText).ToArray();
+                    var requestBody = new DeepLTranslateRequest
+                    {
+                        text = texts,
+                        source_lang = sourceLang.ToUpperInvariant(),
+                        target_lang = targetLang.ToUpperInvariant(),
+                        context = _data.DeeplContext
+                    };
+
+                    string jsonBody = JsonUtility.ToJson(requestBody);
+                    var content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
+
+                    var request = new HttpRequestMessage(HttpMethod.Post, _data.DeeplApiUrl);
+                    request.Content = content;
+                    request.Headers.Add("Authorization", $"DeepL-Auth-Key {_data.DeeplApiKey}");
+
+                    try
+                    {
+                        var response = await _httpClient.SendAsync(request);
+                        response.EnsureSuccessStatusCode();
+
+                        var responseJson = await response.Content.ReadAsStringAsync();
+                        var wrapper = JsonUtility.FromJson<DeepLResponseWrapper>(responseJson);
+                        
+                        if (wrapper?.translations != null && wrapper.translations.Length == batch.Count)
+                        {
+                            for (int j = 0; j < batch.Count; j++)
+                            {
+                                string translatedText = wrapper.translations[j].text;
+                                _data.LanguageData[batch[j].Key][targetLang] = translatedText;
+                            }
+                            _data.HasUnsavedChanges = true;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogError($"DeepL batch translation failed: {ex.Message}");
+                    }
+
+                    processedItems += batch.Count;
+                    onProgress?.Invoke((float)processedItems / totalItems, $"Translated {processedItems} / {totalItems}...");
+                    await Task.Delay(LanguageEditorData.DeeplRequestDelayMs);
+                }
+            }
+        }
+
+        private async Task BatchTranslateGeminiAsync(List<MissingTranslation> missingList, Action<float, string> onProgress, Func<bool> isCancelled)
+        {
+            int totalItems = missingList.Count;
+            int processedItems = 0;
+            int batchSize = 20;
+
+            string apiKey = _data.GeminiApiKey;
+            if (string.IsNullOrEmpty(apiKey))
+            {
+                Debug.LogError("Gemini API Key is missing.");
+                return;
+            }
+
+            string model = _data.GeminiModel == "custom" ? _data.GeminiCustomModel : _data.GeminiModel;
+            string url = $"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={apiKey}";
+
+            for (int i = 0; i < totalItems; i += batchSize)
+            {
+                if (isCancelled != null && isCancelled()) break;
+
+                var batch = missingList.Skip(i).Take(batchSize).ToList();
+                onProgress?.Invoke((float)processedItems / totalItems, $"Gemini: Translating batch {i/batchSize + 1} ({batch.Count} items)...");
+
+                var sb = new StringBuilder();
+                sb.AppendLine("Translate the following texts to their respective target languages.");
+                sb.AppendLine("Return ONLY a valid flat JSON object without any markdown block. The keys of the JSON must exactly match the 'ID' provided.");
+                sb.AppendLine("Data to translate:");
+
+                foreach (var item in batch)
+                {
+                    string compositeId = $"{item.Key}:::{item.TargetLang}";
+                    string safeText = item.SourceText.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r");
+                    sb.AppendLine($"ID: \"{compositeId}\", Target Language: \"{item.TargetLang}\", Text: \"{safeText}\"");
+                }
+
+                string systemPrompt = _data.GeminiContext;
+                string userPrompt = sb.ToString();
+
+                var requestBody = new GeminiRequest
+                {
+                    system_instruction = new GeminiContent { parts = new[] { new GeminiPart { text = systemPrompt } } },
+                    contents = new[] { new GeminiContent { parts = new[] { new GeminiPart { text = userPrompt } } } },
+                    generationConfig = new GeminiGenerationConfig { response_mime_type = "application/json" }
+                };
+
+                string jsonBody = JsonUtility.ToJson(requestBody);
+                var content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
+
+                try
+                {
+                    var response = await _httpClient.PostAsync(url, content);
+                    string responseJson = await response.Content.ReadAsStringAsync();
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        Debug.LogError($"Gemini batch translation failed: {response.StatusCode} - {responseJson}");
+                        continue;
+                    }
+
+                    var parsedResult = ParseGeminiResponse(responseJson);
+                    if (parsedResult.Count > 0)
+                    {
+                        foreach (var kvp in parsedResult)
+                        {
+                            string compositeId = kvp.Key;
+                            string translatedText = kvp.Value;
+
+                            int separatorIndex = compositeId.LastIndexOf(":::", StringComparison.Ordinal);
+                            if (separatorIndex >= 0)
+                            {
+                                string originalKey = compositeId.Substring(0, separatorIndex);
+                                string targetLang = compositeId.Substring(separatorIndex + 3);
+
+                                if (_data.LanguageData.TryGetValue(originalKey, out var dict))
+                                {
+                                    dict[targetLang] = translatedText;
+                                    _data.HasUnsavedChanges = true;
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"Gemini batch error: {ex.Message}");
+                }
+
+                processedItems += batch.Count;
+                onProgress?.Invoke((float)processedItems / totalItems, $"Translated {processedItems} / {totalItems}...");
+            }
+        }
 
         /// <summary>
         /// Translates text using DeepL API.

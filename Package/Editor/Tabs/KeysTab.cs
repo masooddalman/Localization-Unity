@@ -87,6 +87,15 @@ namespace PicoShot.Localization.Editor.Tabs
                 GUI.FocusControl(null);
             }
 
+            if (string.IsNullOrEmpty(Data.SelectedView))
+            {
+                if (GUILayout.Button("Translate All Missing", GUILayout.Width(130)))
+                {
+                    ExecuteTranslateAllMissing();
+                    GUIUtility.ExitGUI();
+                }
+            }
+
             if (GUILayout.Button("Export JSON", GUILayout.Width(85)))
             {
                 if (string.IsNullOrEmpty(Data.SelectedView))
@@ -447,6 +456,54 @@ namespace PicoShot.Localization.Editor.Tabs
             }
             finally
             {
+                _isTranslating = false;
+                Editor.Repaint();
+            }
+        }
+
+        private async void ExecuteTranslateAllMissing()
+        {
+            if (_isTranslating) return;
+
+            if (!EditorUtility.DisplayDialog("Batch Translate", 
+                "Are you sure you want to translate all missing translations for all keys? This may take some time depending on the number of missing keys.", 
+                "Start", "Cancel"))
+                return;
+
+            _isTranslating = true;
+            Editor.Repaint();
+
+            bool isCancelled = false;
+
+            Action<float, string> onProgress = (progress, message) =>
+            {
+                if (EditorUtility.DisplayCancelableProgressBar("Batch Translating", message, progress))
+                {
+                    isCancelled = true;
+                }
+            };
+
+            try
+            {
+                await _translationService.TranslateAllMissingAsync(onProgress, () => isCancelled);
+                
+                if (isCancelled)
+                {
+                    Editor.ShowNotification(new GUIContent("Batch Translation Cancelled"));
+                }
+                else
+                {
+                    Editor.ShowNotification(new GUIContent("Batch Translation Completed"));
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Batch translation failed: {ex.Message}");
+                Editor.ShowNotification(new GUIContent("Batch Translation Failed!"));
+            }
+            finally
+            {
+                EditorUtility.ClearProgressBar();
                 _isTranslating = false;
                 Editor.Repaint();
             }

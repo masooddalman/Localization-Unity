@@ -371,6 +371,9 @@ namespace PicoShot.Localization.Editor.Tabs
             if (GUILayout.Button("Rename", GUILayout.Width(65)))
                 RenameKey();
 
+            if (GUILayout.Button("Edit", GUILayout.Width(45)))
+                EditKeyDefaultValue();
+
             EditorGUI.BeginDisabledGroup(_isTranslating);
             if (GUILayout.Button(_isTranslating ? "Translating..." : "Translate", GUILayout.Width(85)))
                 ExecuteTranslation();
@@ -567,6 +570,37 @@ namespace PicoShot.Localization.Editor.Tabs
 
                 Editor.Repaint();
             }, isKeyName: true);
+        }
+
+        private void EditKeyDefaultValue()
+        {
+            var key = Data.SelectedKey;
+            string defaultLang = PicoShot.Localization.Config.LocalizationConfigProvider.Config.DefaultLanguage;
+
+            string currentDefaultText = "";
+            if (Data.LanguageData.TryGetValue(key, out var langDict) && langDict.TryGetValue(defaultLang, out string val))
+            {
+                currentDefaultText = val;
+            }
+
+            OpenTextEditor(currentDefaultText, (newDefaultText) =>
+            {
+                if (Data.LanguageData.TryGetValue(key, out var keyData))
+                {
+                    keyData[defaultLang] = newDefaultText;
+
+                    foreach (var lang in keyData.Keys.ToList())
+                    {
+                        if (lang != defaultLang)
+                        {
+                            keyData[lang] = "";
+                        }
+                    }
+
+                    Data.HasUnsavedChanges = true;
+                    Editor.Repaint();
+                }
+            });
         }
 
         private void ClearKeyData()

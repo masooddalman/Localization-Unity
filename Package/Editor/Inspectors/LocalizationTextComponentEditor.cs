@@ -3,7 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
+using TMPro;
 using PicoShot.Localization.Editor.Data;
+using PicoShot.Localization.Editor.Services;
+using PicoShot.Localization.Data;
+using PicoShot.Localization.Rtl;
+using PicoShot.Localization.Config;
 
 namespace PicoShot.Localization.Editor.Inspectors
 {
@@ -24,6 +29,14 @@ namespace PicoShot.Localization.Editor.Inspectors
         
         private bool _isDataInitialized = false;
         private char _lastViewDelimiter;
+
+        // AI PREVIEW FIELDS
+        private bool _showPreviewSection = true;
+        private int _selectedLanguageIndex = 0;
+        private int _previewLength = -1;
+        private string[] _availableLanguages;
+        private bool _isTranslating = false;
+        private string _lastPreviewLang = "";
 
         private static char GetViewDelimiter() => LanguageEditorData.GetCurrentViewDelimiter();
 
@@ -222,7 +235,163 @@ namespace PicoShot.Localization.Editor.Inspectors
             EditorGUILayout.Space();
             EditorGUILayout.PropertyField(_styleOverridesProp, true);
 
+            DrawPreviewSection(component);
+
             serializedObject.ApplyModifiedProperties();
+        }
+
+        private void DrawPreviewSection(LocalizationTextComponent component)
+        {
+            if (Application.isPlaying || string.IsNullOrEmpty(component.TranslationKey))
+                return;
+
+            var tmpText = component.GetComponent<TMP_Text>();
+            if (tmpText == null) return;
+
+            EditorGUILayout.Space();
+            _showPreviewSection = EditorGUILayout.Foldout(_showPreviewSection, "Preview & Fit (AI Rephrase)", true, EditorStyles.foldoutHeader);
+
+            if (_showPreviewSection)
+            {
+                EditorGUILayout.BeginVertical("box");
+                
+                var editorWindow = Resources.FindObjectsOfTypeAll<LocalizationEditor>().FirstOrDefault();
+                if (editorWindow == null)
+                {
+                    EditorGUILayout.HelpBox("Please keep the 'Language Editor' window open to use the AI Rephrase feature.", MessageType.Warning);
+                    if (GUILayout.Button("Open Language Editor"))
+                    {
+                        LocalizationEditor.OpenWindow();
+                    }
+                    EditorGUILayout.EndVertical();
+                    return;
+                }
+
+                var editorData = editorWindow.GetData();
+                if (editorData == null || !editorData.LanguageData.ContainsKey(component.TranslationKey))
+                {
+                    EditorGUILayout.HelpBox("Key not found in localization data. Please add it in the Localization Editor first.", MessageType.Warning);
+                    EditorGUILayout.EndVertical();
+                    return;
+                }
+
+                _availableLanguages = editorData.LanguageCodes.ToArray();
+                if (_availableLanguages == null || _availableLanguages.Length == 0)
+                {
+                    EditorGUILayout.EndVertical();
+                    return;
+                }
+
+                _selectedLanguageIndex = EditorGUILayout.Popup("Preview Language", _selectedLanguageIndex, _availableLanguages);
+                if (_selectedLanguageIndex < 0 || _selectedLanguageIndex >= _availableLanguages.Length)
+                {
+                    _selectedLanguageIndex = 0;
+                }
+                
+                string targetLang = _availableLanguages[_selectedLanguageIndex];
+
+                if (_lastPreviewLang != targetLang)
+                {
+                    _previewLength = -1;
+                    _lastPreviewLang = targetLang;
+                }
+
+                editorData.LanguageData[component.TranslationKey].TryGetValue(targetLang, out string fullTranslationText);
+                fullTranslationText ??= string.Empty;
+
+                if (string.IsNullOrEmpty(fullTranslationText))
+                {
+                    EditorGUILayout.HelpBox($"No translation found for {targetLang}.", MessageType.Info);
+                    EditorGUILayout.EndVertical();
+                    return;
+                }
+
+                if (_previewLength == -1 || _previewLength > fullTranslationText.Length)
+                {
+                    _previewLength = fullTranslationText.Length;
+                }
+
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField("Character Limit:", GUILayout.Width(100));
+                
+                EditorGUI.BeginChangeCheck();
+                _previewLength = EditorGUILayout.IntSlider(_previewLength, 0, fullTranslationText.Length);
+                bool sliderChanged = EditorGUI.EndChangeCheck();
+                EditorGUILayout.EndHorizontal();
+
+                string previewSubstring = fullTranslationText.Substring(0, _previewLength);
+                
+                if (LanguageDefinitions.IsRightToLeft(targetLang))
+                {
+                    if (LocalizationConfigProvider.Config.SupportMixedText)
+                        previewSubstring = RtlTextHandler.FixMixed(previewSubstring, true);
+                    else
+                        previewSubstring = RtlTextHandler.Fix(previewSubstring);
+                }
+
+                if (tmpText.text != previewSubstring)
+                {
+                    Undo.RecordObject(tmpText, "Update TMP Preview");
+                    tmpText.text = previewSubstring;
+                    EditorUtility.SetDirty(tmpText);
+                }
+
+                EditorGUILayout.Space();
+                
+                if (_previewLength < fullTranslationText.Length)
+                {
+                    EditorGUILayout.HelpBox($"Currently truncating text by {fullTranslationText.Length - _previewLength} characters.", MessageType.Warning);
+                }
+
+                EditorGUI.BeginDisabledGroup(_isTranslating || _previewLength == fullTranslationText.Length);
+                if (GUILayout.Button(_isTranslating ? "Rephrasing..." : $"Rephrase '{targetLang}' to fit {_previewLength} chars limit", GUILayout.Height(30)))
+                {
+                    RephraseAction(editorWindow, editorData, component.TranslationKey, targetLang, _previewLength, tmpText);
+                }
+                EditorGUI.EndDisabledGroup();
+
+                EditorGUILayout.EndVertical();
+            }
+        }
+
+        private async void RephraseAction(LocalizationEditor editorWindow, LanguageEditorData editorData, string key, string targetLang, int maxCharacters, TMP_Text tmpText)
+        {
+            _isTranslating = true;
+            Repaint();
+
+            try
+            {
+                var translationService = new TranslationService(editorData);
+                await translationService.RephraseWithConstraintAsync(key, targetLang, maxCharacters);
+                
+                if (editorData.LanguageData.TryGetValue(key, out var keyDict) && keyDict.TryGetValue(targetLang, out var newText))
+                {
+                    string shapedText = newText;
+                    if (LanguageDefinitions.IsRightToLeft(targetLang))
+                    {
+                        if (LocalizationConfigProvider.Config.SupportMixedText)
+                            shapedText = RtlTextHandler.FixMixed(shapedText, true);
+                        else
+                            shapedText = RtlTextHandler.Fix(shapedText);
+                    }
+
+                    Undo.RecordObject(tmpText, "Apply AI Rephrase");
+                    tmpText.text = shapedText;
+                    EditorUtility.SetDirty(tmpText);
+                }
+
+                editorWindow.Repaint();
+                _previewLength = -1;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Rephrase failed: {ex.Message}");
+            }
+            finally
+            {
+                _isTranslating = false;
+                Repaint();
+            }
         }
     }
     [CustomPropertyDrawer(typeof(MarginAttribute))]

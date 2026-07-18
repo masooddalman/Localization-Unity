@@ -557,6 +557,118 @@ namespace PicoShot.Localization.Editor.Services
             return dict;
         }
 
+        public async Task RephraseWithConstraintAsync(string key, string targetLang, int maxCharacters)
+        {
+            if (!_data.LanguageData.TryGetValue(key, out var keyData))
+            {
+                Debug.LogError($"Key '{key}' not found in LanguageData.");
+                return;
+            }
+
+            string defaultLang = LocalizationConfigProvider.Config.DefaultLanguage;
+            string sourceText = null;
+            string sourceLang = defaultLang;
+
+            if (keyData.TryGetValue(defaultLang, out var defaultValue) && !string.IsNullOrWhiteSpace(defaultValue))
+            {
+                sourceText = defaultValue;
+            }
+            else
+            {
+                foreach (var kvp in keyData)
+                {
+                    if (!string.IsNullOrWhiteSpace(kvp.Value))
+                    {
+                        sourceText = kvp.Value;
+                        sourceLang = kvp.Key;
+                        break;
+                    }
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(sourceText))
+            {
+                Debug.LogWarning("No source text available to rephrase.");
+                return;
+            }
+
+            string apiKey = _data.GeminiApiKey;
+            if (string.IsNullOrEmpty(apiKey))
+            {
+                Debug.LogError("Gemini API Key is missing.");
+                return;
+            }
+
+            string model = _data.GeminiModel == "custom" ? _data.GeminiCustomModel : _data.GeminiModel;
+            string url = $"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={apiKey}";
+
+            string systemPrompt = "You are a specialized game localization translator. Your task is to accurately translate and rephrase text for game UI.";
+            
+            var sb = new StringBuilder();
+            sb.AppendLine($"Translate/Rephrase the following text into the target language.");
+            sb.AppendLine($"STRICT CONSTRAINT: The final translated text MUST be extremely concise and STRICTLY UNDER {maxCharacters} characters.");
+            sb.AppendLine("It is acceptable to use common abbreviations, shorten words, or adapt the literal meaning slightly to preserve this strict length limit.");
+            sb.AppendLine("Return ONLY a valid flat JSON object mapping the target language code to the translated text. No markdown blocks.");
+            sb.AppendLine($"Target Language: \"{targetLang}\"");
+            sb.AppendLine($"Source Language: \"{sourceLang}\"");
+            sb.AppendLine($"Source Text: \"{sourceText.Replace("\"", "\\\"")}\"");
+
+            var requestBody = new GeminiRequest
+            {
+                system_instruction = new GeminiContent { parts = new[] { new GeminiPart { text = systemPrompt } } },
+                contents = new[] { new GeminiContent { parts = new[] { new GeminiPart { text = sb.ToString() } } } },
+                generationConfig = new GeminiGenerationConfig { response_mime_type = "application/json" }
+            };
+
+            string jsonBody = JsonUtility.ToJson(requestBody);
+            var content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
+
+            try
+            {
+                var response = await _httpClient.PostAsync(url, content);
+                string responseJson = await response.Content.ReadAsStringAsync();
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    Debug.LogError($"Gemini rephrase failed: {response.StatusCode} - {responseJson}");
+                    return;
+                }
+
+                var parsedResult = ParseGeminiResponse(responseJson);
+                if (parsedResult.Count > 0)
+                {
+                    // It should return {"targetLang": "text"} or similar. Just take the first valid value.
+                    string rephrasedText = null;
+                    if (parsedResult.TryGetValue(targetLang, out var exactMatch))
+                    {
+                        rephrasedText = exactMatch;
+                    }
+                    else if (parsedResult.Count == 1)
+                    {
+                        rephrasedText = parsedResult.Values.First();
+                    }
+
+                    if (!string.IsNullOrEmpty(rephrasedText))
+                    {
+                        keyData[targetLang] = rephrasedText;
+                        _data.HasUnsavedChanges = true;
+                    }
+                    else
+                    {
+                        Debug.LogError("Gemini rephrase failed to extract text from JSON.");
+                    }
+                }
+                else
+                {
+                    Debug.LogError("Gemini rephrase returned empty or invalid JSON.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Gemini rephrase error: {ex.Message}");
+            }
+        }
+
         [Serializable]
         private class GeminiRequest
         {

@@ -233,14 +233,16 @@ namespace PicoShot.Localization.Editor.Inspectors
             EditorGUILayout.PropertyField(_onTextUpdatedProp);
 
             EditorGUILayout.Space();
+            EditorGUI.BeginChangeCheck();
             EditorGUILayout.PropertyField(_styleOverridesProp, true);
+            bool styleOverridesChanged = EditorGUI.EndChangeCheck();
 
-            DrawPreviewSection(component);
+            DrawPreviewSection(component, styleOverridesChanged);
 
             serializedObject.ApplyModifiedProperties();
         }
 
-        private void DrawPreviewSection(LocalizationTextComponent component)
+        private void DrawPreviewSection(LocalizationTextComponent component, bool styleOverridesChanged)
         {
             if (Application.isPlaying || string.IsNullOrEmpty(component.TranslationKey))
                 return;
@@ -290,7 +292,9 @@ namespace PicoShot.Localization.Editor.Inspectors
                 
                 string targetLang = _availableLanguages[_selectedLanguageIndex];
 
-                if (_lastPreviewLang != targetLang)
+                bool langChanged = _lastPreviewLang != targetLang;
+
+                if (langChanged)
                 {
                     _previewLength = -1;
                     _lastPreviewLang = targetLang;
@@ -329,10 +333,11 @@ namespace PicoShot.Localization.Editor.Inspectors
                         previewSubstring = RtlTextHandler.Fix(previewSubstring);
                 }
 
-                if (tmpText.text != previewSubstring)
+                if (tmpText.text != previewSubstring || styleOverridesChanged || langChanged)
                 {
                     Undo.RecordObject(tmpText, "Update TMP Preview");
                     tmpText.text = previewSubstring;
+                    component.ApplyStyleOverrides(targetLang);
                     EditorUtility.SetDirty(tmpText);
                 }
 

@@ -649,14 +649,16 @@ namespace PicoShot.Localization
             }
             return text;
         }
-
         #endregion
 
-        private void ApplyStyleOverrides()
+        public void ApplyStyleOverrides(string targetLang = null)
         {
+#if UNITY_EDITOR
+            if (_tmpText == null) _tmpText = GetComponent<TMP_Text>();
+#endif
             if (_tmpText == null) return;
 
-            string currentLang = LocalizationManager.CurrentLanguage;
+            string currentLang = string.IsNullOrEmpty(targetLang) ? LocalizationManager.CurrentLanguage : targetLang;
             if (string.IsNullOrEmpty(currentLang)) return;
 
             var overrideData = StyleOverrides.FirstOrDefault(o => string.Equals(o.LanguageCode, currentLang, StringComparison.OrdinalIgnoreCase));

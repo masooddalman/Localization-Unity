@@ -109,6 +109,13 @@ namespace PicoShot.Localization.Editor.Tabs
                 Data.ClearGeneratedCharset();
             }
 
+            bool excludePunctuation = EditorGUILayout.Toggle("Exclude Punctuation", Data.ExcludePunctuationFromCharset);
+            if (excludePunctuation != Data.ExcludePunctuationFromCharset)
+            {
+                Data.ExcludePunctuationFromCharset = excludePunctuation;
+                Data.ClearGeneratedCharset();
+            }
+
             bool anySelected = Data.LanguageSelectionForCharset.Any(kvp => kvp.Value);
             EditorGUI.BeginDisabledGroup(!anySelected);
             if (GUILayout.Button("Generate Charset", GUILayout.Height(30)))

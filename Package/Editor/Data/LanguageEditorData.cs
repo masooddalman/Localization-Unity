@@ -76,6 +76,7 @@ namespace PicoShot.Localization.Editor.Data
         public string GeneratedCharset { get; private set; } = "";
         public bool HasGeneratedCharset { get; private set; }
         public bool ExcludeNumbersFromCharset { get; set; } = false;
+        public bool ExcludePunctuationFromCharset { get; set; } = true;
 
         // Translation Provider Settings
         public const string TranslationProviderPref = "PicoShot_Localization_TranslationProvider";
@@ -443,7 +444,7 @@ namespace PicoShot.Localization.Editor.Data
                         {
                             value = RtlTextHandler.Fix(value);
                         }
-                        AddValueToCharset(value, charSet, ExcludeNumbersFromCharset);
+                        AddValueToCharset(value, charSet, ExcludeNumbersFromCharset, ExcludePunctuationFromCharset);
                     }
                 }
             }
@@ -461,7 +462,7 @@ namespace PicoShot.Localization.Editor.Data
             HasGeneratedCharset = false;
         }
 
-        private static void AddValueToCharset(string value, HashSet<char> charSet, bool excludeNumbers)
+        private static void AddValueToCharset(string value, HashSet<char> charSet, bool excludeNumbers, bool excludePunctuation)
         {
             if (!string.IsNullOrEmpty(value))
             {
@@ -470,7 +471,10 @@ namespace PicoShot.Localization.Editor.Data
                     if (excludeNumbers && char.IsDigit(c))
                         continue;
 
-                    if (!char.IsPunctuation(c) && !char.IsWhiteSpace(c) && !char.IsControl(c))
+                    if (excludePunctuation && char.IsPunctuation(c))
+                        continue;
+
+                    if (!char.IsWhiteSpace(c) && !char.IsControl(c))
                     {
                         charSet.Add(c);
                     }

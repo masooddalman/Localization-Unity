@@ -101,6 +101,14 @@ namespace PicoShot.Localization.Editor.Tabs
             }
             EditorGUILayout.EndScrollView();
 
+            EditorGUILayout.Space(5);
+            bool excludeNumbers = EditorGUILayout.Toggle("Exclude Numbers", Data.ExcludeNumbersFromCharset);
+            if (excludeNumbers != Data.ExcludeNumbersFromCharset)
+            {
+                Data.ExcludeNumbersFromCharset = excludeNumbers;
+                Data.ClearGeneratedCharset();
+            }
+
             bool anySelected = Data.LanguageSelectionForCharset.Any(kvp => kvp.Value);
             EditorGUI.BeginDisabledGroup(!anySelected);
             if (GUILayout.Button("Generate Charset", GUILayout.Height(30)))

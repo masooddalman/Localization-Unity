@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using PicoShot.Localization.Config;
+using PicoShot.Localization.Data;
+using PicoShot.Localization.Rtl;
 
 namespace PicoShot.Localization.Editor.Data
 {
@@ -73,6 +75,7 @@ namespace PicoShot.Localization.Editor.Data
         public Dictionary<string, bool> LanguageSelectionForCharset { get; } = new();
         public string GeneratedCharset { get; private set; } = "";
         public bool HasGeneratedCharset { get; private set; }
+        public bool ExcludeNumbersFromCharset { get; set; } = false;
 
         // Translation Provider Settings
         public const string TranslationProviderPref = "PicoShot_Localization_TranslationProvider";
@@ -430,10 +433,18 @@ namespace PicoShot.Localization.Editor.Data
 
             foreach (var lang in LanguageCodes.Where(l => LanguageSelectionForCharset[l]))
             {
+                bool isRtl = LanguageDefinitions.IsRightToLeft(lang);
+
                 foreach (var key in Keys)
                 {
                     if (LanguageData[key].TryGetValue(lang, out var value))
-                        AddValueToCharset(value, charSet);
+                    {
+                        if (isRtl && !string.IsNullOrEmpty(value))
+                        {
+                            value = RtlTextHandler.Fix(value);
+                        }
+                        AddValueToCharset(value, charSet, ExcludeNumbersFromCharset);
+                    }
                 }
             }
 
@@ -450,12 +461,20 @@ namespace PicoShot.Localization.Editor.Data
             HasGeneratedCharset = false;
         }
 
-        private static void AddValueToCharset(string value, HashSet<char> charSet)
+        private static void AddValueToCharset(string value, HashSet<char> charSet, bool excludeNumbers)
         {
             if (!string.IsNullOrEmpty(value))
             {
                 foreach (var c in value)
-                    charSet.Add(c);
+                {
+                    if (excludeNumbers && char.IsDigit(c))
+                        continue;
+
+                    if (!char.IsPunctuation(c) && !char.IsWhiteSpace(c) && !char.IsControl(c))
+                    {
+                        charSet.Add(c);
+                    }
+                }
             }
         }
     }

@@ -270,6 +270,7 @@ namespace PicoShot.Localization.Editor.Services
                 var sb = new StringBuilder();
                 sb.AppendLine("Translate the following texts to their respective target languages.");
                 sb.AppendLine("Return ONLY a valid flat JSON object without any markdown block. The keys of the JSON must exactly match the 'ID' provided.");
+                sb.AppendLine("IMPORTANT: Preserve all newlines (\\n) exactly as they appear in the source text. The translated values in the JSON must use \\n to represent line breaks.");
                 sb.AppendLine("Data to translate:");
 
                 foreach (var item in batch)
@@ -431,8 +432,10 @@ namespace PicoShot.Localization.Editor.Services
             string model = _data.GeminiModel == "custom" ? _data.GeminiCustomModel : _data.GeminiModel;
             string url = $"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={apiKey}";
 
-            string systemPrompt = _data.GeminiContext;
-            string userPrompt = $"Source Language: {sourceLang}\nTarget Languages (keys): {string.Join(", ", targetLanguages)}\nSource Text:\n{sourceText}";
+            string systemPrompt = _data.GeminiContext +
+                "\nIMPORTANT: Preserve all newlines in the source text. Represent line breaks as \\n inside the JSON string values.";
+            string escapedSourceText = sourceText.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r");
+            string userPrompt = $"Source Language: {sourceLang}\nTarget Languages (keys): {string.Join(", ", targetLanguages)}\nSource Text: \"{escapedSourceText}\"";
             var requestBody = new GeminiRequest
             {
                 system_instruction = new GeminiContent { parts = new[] { new GeminiPart { text = systemPrompt } } },
@@ -531,10 +534,19 @@ namespace PicoShot.Localization.Editor.Services
                         if (valStart == -1)
                             break;
 
+                        // Scan for closing quote, correctly skipping ALL escape sequences
+                        // and tolerating literal newlines that a model may embed in the JSON.
                         int valEnd = valStart + 1;
                         while (valEnd < jsonText.Length)
                         {
-                            if (jsonText[valEnd] == '"' && jsonText[valEnd - 1] != '\\')
+                            char vc = jsonText[valEnd];
+                            if (vc == '\\')
+                            {
+                                // Skip the escape character and the next character together
+                                valEnd += 2;
+                                continue;
+                            }
+                            if (vc == '"')
                                 break;
                             valEnd++;
                         }
@@ -543,7 +555,13 @@ namespace PicoShot.Localization.Editor.Services
                             break;
 
                         string val = jsonText.Substring(valStart + 1, valEnd - valStart - 1);
-                        val = val.Replace("\\\"", "\"").Replace("\\n", "\n").Replace("\\r", "\r").Replace("\\t", "\t").Replace("\\\\", "\\");
+                        // Unescape standard JSON escape sequences
+                        val = val
+                            .Replace("\\\"", "\"")
+                            .Replace("\\n", "\n")
+                            .Replace("\\r", "\r")
+                            .Replace("\\t", "\t")
+                            .Replace("\\\\", "\\");
 
                         dict[key] = val;
                         i = valEnd + 1;

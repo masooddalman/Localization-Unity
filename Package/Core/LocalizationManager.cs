@@ -754,6 +754,53 @@ namespace PicoShot.Localization
             ScanAvailableLanguages();
         }
 
+        /// <summary>
+        /// Forces a full re-scan of translation keys from disk without re-initializing the entire manager.
+        /// Reads directly from disk (bypassing Resources cache) so newly added keys are visible immediately
+        /// in Inspector dropdowns without restarting Unity.
+        /// </summary>
+        public static void ForceRefreshKeys()
+        {
+            _allTranslationKeys = new HashSet<string>(StringComparer.Ordinal);
+
+            try
+            {
+                string filePath = Path.Combine(LanguagesPath, "translations.csv");
+                if (!File.Exists(filePath))
+                    return;
+
+                string csvText = File.ReadAllText(filePath);
+                var data = LocaleCsvSerializer.LoadTranslationsFromString(csvText);
+                var config = LocalizationConfigProvider.Config;
+
+                if (_availableLanguages == null)
+                    _availableLanguages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var lang in data.GetAllLanguageCodes())
+                {
+                    _availableLanguages.Add(lang);
+                }
+
+                if (_availableLanguages.Contains(config.DefaultLanguage))
+                {
+                    foreach (var kvp in data.Translations)
+                    {
+                        if (kvp.Value.ContainsKey(config.DefaultLanguage))
+                            _allTranslationKeys.Add(kvp.Key);
+                    }
+                }
+                else
+                {
+                    foreach (var kvp in data.Translations)
+                        _allTranslationKeys.Add(kvp.Key);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[LocalizationManager] ForceRefreshKeys failed: {ex.Message}");
+            }
+        }
+
 #endif
 
         #endregion

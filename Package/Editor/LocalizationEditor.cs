@@ -404,6 +404,12 @@ namespace PicoShot.Localization
                     LocalizationManager.Dispose();
                     LocalizationManager.Initialize();
                 }
+
+                // Refresh AssetDatabase so Unity re-imports the updated CSV,
+                // then force-refresh the in-memory key set so open Inspectors
+                // pick up newly added keys without restarting the editor.
+                AssetDatabase.Refresh();
+                LocalizationManager.ForceRefreshKeys();
             }
             catch (Exception ex)
             {

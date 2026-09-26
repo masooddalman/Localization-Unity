@@ -19,6 +19,7 @@ namespace PicoShot.Localization
     /// </summary>
     [AddComponentMenu("UI/Localized Text")]
     [DisallowMultipleComponent]
+    [ExecuteAlways]
     public class LocalizationTextComponent : UIBehaviour
     {
         #region Inspector Fields
@@ -181,6 +182,10 @@ namespace PicoShot.Localization
             // Apply the current font immediately in case the font-changed event was fired before this component subscribed.
             LocalizationManager.GetCurrentFonts(out var tmpFont, out var legacyFont);
             UpdateFont(tmpFont, legacyFont);
+
+#if TMIPRO_EXISTS || UNITY_2018_1_OR_NEWER // TMPro is guaranteed in newer unity versions, but this checks if it's there
+            TMPro.TMPro_EventManager.TEXT_CHANGED_EVENT.Add(OnTMPTextChanged);
+#endif
         }
 
         protected override void OnDisable()
@@ -188,6 +193,10 @@ namespace PicoShot.Localization
             base.OnDisable();
             LocalizationManager.OnLanguageChanged -= UpdateText;
             LocalizationManager.OnFontChanged -= UpdateFont;
+
+#if TMIPRO_EXISTS || UNITY_2018_1_OR_NEWER
+            TMPro.TMPro_EventManager.TEXT_CHANGED_EVENT.Remove(OnTMPTextChanged);
+#endif
         }
 
         protected override void OnDestroy()
@@ -196,6 +205,14 @@ namespace PicoShot.Localization
             LocalizationManager.OnLanguageChanged -= UpdateText;
             LocalizationManager.OnFontChanged -= UpdateFont;
             _textProcessors.Clear();
+        }
+
+        private void OnTMPTextChanged(UnityEngine.Object obj)
+        {
+            if (obj == _tmpText && !_isFixingTMP && _tmpText != null && LocalizationManager.IsRightToLeft)
+            {
+                ApplyTMPRtlWrap(_originalLogicalText, force: false);
+            }
         }
 
 #if UNITY_EDITOR
@@ -478,17 +495,39 @@ namespace PicoShot.Localization
                 {
                     var output = new System.Text.StringBuilder(shapedLogicalText.Length + lineCount);
                     var markupState = new RtlTextMeshProHandler.MarkupState();
-                    int sourceStart = 0;
-
-                    for (int lineIndex = 0; lineIndex < lineCount; lineIndex++)
+                    var sortedLines = new List<KeyValuePair<int, int>>(lineCount);
+                    for (int i = 0; i < lineCount; i++)
                     {
-                        int sourceEnd = shapedLogicalText.Length;
-                        if (lineIndex < lineCount - 1)
+                        int minIndex = int.MaxValue;
+                        int firstChar = textInfo.lineInfo[i].firstCharacterIndex;
+                        int lastChar = textInfo.lineInfo[i].lastCharacterIndex;
+                        for (int c = firstChar; c <= lastChar && c < textInfo.characterCount; c++)
                         {
-                            int nextCharacterIndex = textInfo.lineInfo[lineIndex + 1].firstCharacterIndex;
-                            if (nextCharacterIndex >= 0 && nextCharacterIndex < textInfo.characterCount)
-                                sourceEnd = textInfo.characterInfo[nextCharacterIndex].index;
+                            int origIndex = textInfo.characterInfo[c].index;
+                            if (origIndex < minIndex) minIndex = origIndex;
                         }
+                        
+                        if (minIndex == int.MaxValue)
+                        {
+                            if (i == 0) minIndex = 0;
+                            else 
+                            {
+                                int prevLastChar = textInfo.lineInfo[i - 1].lastCharacterIndex;
+                                minIndex = (prevLastChar >= 0 && prevLastChar < textInfo.characterCount) 
+                                    ? textInfo.characterInfo[prevLastChar].index + 1 
+                                    : 0;
+                            }
+                        }
+                        sortedLines.Add(new KeyValuePair<int, int>(i, minIndex));
+                    }
+
+                    // Sort ascending by logical index to restore true paragraph order
+                    sortedLines.Sort((a, b) => a.Value.CompareTo(b.Value));
+
+                    for (int i = 0; i < sortedLines.Count; i++)
+                    {
+                        int sourceStart = (i == 0) ? 0 : sortedLines[i].Value;
+                        int sourceEnd = (i == sortedLines.Count - 1) ? shapedLogicalText.Length : sortedLines[i + 1].Value;
 
                         sourceEnd = Mathf.Clamp(sourceEnd, sourceStart, shapedLogicalText.Length);
                         string shapedLine = shapedLogicalText.Substring(sourceStart, sourceEnd - sourceStart);
@@ -499,11 +538,10 @@ namespace PicoShot.Localization
                             _tmpText.richText,
                             markupState));
 
-                        if (lineIndex < lineCount - 1) output.Append('\n');
-                        sourceStart = sourceEnd;
+                        if (i < sortedLines.Count - 1) output.Append('\n');
                     }
 
-                    finalText = output.ToString();
+                    finalText = output.ToString().Replace(' ', '\u00A0');
                 }
             }
             catch (Exception ex)

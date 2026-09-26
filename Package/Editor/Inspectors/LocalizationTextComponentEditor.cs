@@ -124,7 +124,7 @@ namespace PicoShot.Localization.Editor.Inspectors
             EditorGUILayout.LabelField("Localization Key", EditorStyles.boldLabel);
             if (GUILayout.Button("Refresh Keys", EditorStyles.miniButton, GUILayout.Width(80)))
             {
-                LocalizationManager.Initialize(); 
+                LocalizationManager.ForceRefreshKeys();
                 RefreshData();
             }
             EditorGUILayout.EndHorizontal();
